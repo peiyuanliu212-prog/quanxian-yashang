@@ -1,0 +1,1788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>全线压上</title>
+<script>
+  /* 虎扑云网关配置（部署时回写）：ACTIVITY_API_BASE 须为 queryGateway 查出的 HTTPSERVICE 网关域名、
+     ACTIVITY_ENV_ID 为活动云环境 envId（act-cloudbase/排行榜模板原文口径）。本地备包留空＝榜单/云统计静默关闭，不挡游戏。 */
+  window.QX_API_BASE = window.QX_API_BASE || "";
+  window.QX_ENV_ID = window.QX_ENV_ID || "";
+</script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { background:#0c0e10; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color:#e8ebee; }
+  #phone { max-width:430px; margin:0 auto; background:#14171b; min-height:100vh; display:flex; flex-direction:column; position:relative; }
+  .num { font-family:ui-monospace,Consolas,"SF Mono",monospace; font-variant-numeric:tabular-nums; }
+  /* 顶部资源条：军工控制台 */
+  #hud { background:linear-gradient(#2b3036,#1e2226); padding:6px 8px; padding-top:calc(6px + var(--safe-top, 0px)); font-size:13px; border-bottom:2px solid #454e57; box-shadow:inset 0 1px 0 rgba(255,255,255,.07); }
+  #hud .row { display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  #hud .res b { color:#ffd94d; }
+  #hud .pow.low { color:#ff5a4d; font-weight:bold; }
+  /* 电力条三段（原版口径）：绿充裕/黄临界/红低电 */
+  #powbar { display:inline-block; vertical-align:middle; width:44px; height:7px; background:#101216; border:1px solid #59636d; margin-left:4px; }
+  #powfill { height:100%; width:0%; transition:width .25s; }
+  #powfill.grn { background:#57c256; } #powfill.yel { background:#e8c33a; } #powfill.red { background:#e05244; }
+  .hqbar { flex:1; height:13px; background:#14161a; border:1px solid #59636d; position:relative; min-width:70px; }
+  .hqbar > div { height:100%; transition:width .2s; }
+  .hqbar span { position:absolute; left:2px; top:0; font-size:9px; line-height:13px; color:#fff; text-shadow:0 0 2px #000; white-space:nowrap; }
+  #enemyHQ > div { background:linear-gradient(#e05244,#a32e20); } #myHQ > div { background:linear-gradient(#4d9be6,#2568b8); }
+  #wavebar { background:#241d10; color:#ffcf6e; font-size:12px; padding:4px 8px; text-align:center; border-bottom:1px solid #554411; min-height:22px; }
+  /* L1 分步教学提示条 */
+  #tutbar { display:none; background:#123f2a; color:#c9f5d8; font-size:12px; padding:5px 8px; text-align:center; border-bottom:1px solid #2f9e63; line-height:1.45; }
+  /* 超级武器按钮行 */
+  #swRow { margin-bottom:5px; }
+  #swBtn { width:100%; background:linear-gradient(#3a4046,#2c3136); color:#e8ebee; border:1px solid #59636d; border-radius:5px; padding:8px 2px; font-size:12px; cursor:pointer; }
+  #swBtn small { display:block; color:#ffd94d; font-size:10px; }
+  #swBtn:disabled { opacity:.55; cursor:default; }
+  #swBtn.ready { background:linear-gradient(#8a2a1c,#6d1f14); border-color:#ff7a5c; color:#ffe9e4; animation:swpulse 1s infinite; }
+  @keyframes swpulse { 0%,100% { filter:brightness(1); } 50% { filter:brightness(1.35); } }
+  /* 每日挑战入口 */
+  #dailyBtn { width:100%; margin-top:9px; background:linear-gradient(#14456e,#0f3350); border:1px solid #4da3ff; border-radius:7px; color:#dceeff; padding:13px 10px; cursor:pointer; text-align:left; }
+  #dailyBtn b { display:block; font-size:15px; margin-bottom:4px; }
+  #dailyBtn small { display:block; font-size:11px; color:#9fd0ff; }
+  #warn { display:none; background:#7a1610; color:#fff; text-align:center; font-size:13px; padding:3px; }
+  /* UX-001：放置模式提示条 */
+  #placebar { display:none; background:#14508c; color:#eaf4ff; font-size:12px; padding:5px 8px; align-items:center; gap:8px; border-bottom:1px solid #57a6ff; }
+  #placebar span { flex:1; line-height:1.4; }
+  #cancelPlace { flex:none; background:#e8ebee; color:#14508c; border:1px solid #fff; border-radius:4px; padding:5px 12px; font-size:12px; font-weight:bold; cursor:pointer; }
+  #banner { position:absolute; top:110px; left:0; right:0; text-align:center; font-size:26px; font-weight:bold; color:#ffd94d; text-shadow:0 2px 6px #000; pointer-events:none; z-index:5; letter-spacing:4px; }
+  #stage { position:relative; flex:none; }
+  canvas#cv { display:block; width:100%; touch-action:none; background:#71824c; }
+  canvas#minimap { position:absolute; right:4px; top:8px; width:26px; height:170px; background:rgba(0,0,0,.45); border:1px solid #59636d; z-index:4; }
+  #fps { position:absolute; left:6px; top:6px; font-size:10px; color:#9f9; text-shadow:0 0 2px #000; z-index:4; }
+  /* 底部控制台：深灰金属＋阵营蓝点缀 */
+  #ctrl { background:linear-gradient(#2a2e33,#1d2024); padding:6px; border-top:2px solid #454b52; box-shadow:inset 0 1px 0 rgba(255,255,255,.06); }
+  .btnrow { display:flex; gap:5px; margin-bottom:5px; flex-wrap:wrap; }
+  .btnrow:last-child { margin-bottom:0; }
+  #ctrl button { flex:1; min-width:0; background:linear-gradient(#3a4046,#2c3136); color:#e8ebee; border:1px solid #59636d; border-radius:5px; padding:8px 2px; font-size:12px; line-height:1.25; cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:none; box-shadow:inset 0 1px 0 rgba(255,255,255,.08); }
+  #ctrl button small { display:block; color:#ffd94d; font-size:10px; }
+  #ctrl button.on { background:linear-gradient(#2f6fd0,#2560b4); border-color:#7db4f0; }
+  #ctrl button.half { background:linear-gradient(#7a4dc9,#6238ab); border-color:#b48cff; }
+  #ctrl button:disabled { opacity:.35; }
+  #ctrl button:active { filter:brightness(1.3); }
+  .lbl { font-size:10px; color:#8b95a0; width:100%; margin:2px 0 -1px; letter-spacing:1px; }
+  /* 结算 */
+  #over { display:none; position:absolute; inset:0; background:rgba(0,0,0,.8); z-index:10; text-align:center; padding-top:110px; }
+  #over h1 { font-size:40px; margin-bottom:8px; }
+  #overStars { font-size:30px; color:#ffd94d; letter-spacing:6px; min-height:38px; text-shadow:0 0 10px rgba(255,217,77,.5); }
+  #over p { font-size:15px; margin:6px 0; color:#ddd; line-height:1.7; }
+  #over .btns { display:flex; gap:8px; justify-content:center; margin-top:20px; flex-wrap:wrap; padding:0 16px; }
+  #over button { padding:12px 24px; font-size:16px; background:linear-gradient(#3a4046,#2c3136); color:#e8ebee; border:1px solid #59636d; border-radius:6px; cursor:pointer; }
+  #over #nextBtn { background:linear-gradient(#2f6fd0,#2560b4); border-color:#7db4f0; }
+  /* 关卡选择屏 */
+  #menu { position:absolute; inset:0; background:linear-gradient(#191d21,#101315); z-index:20; padding:26px 18px; overflow-y:auto; text-align:center; }
+  #menu h1 { font-size:36px; letter-spacing:6px; color:#ffd94d; text-shadow:0 2px 8px #000; }
+  #menu .sub { color:#9fb2c8; font-size:13px; margin:6px 0 4px; letter-spacing:2px; }
+  #menu .faction { color:#7db4f0; font-size:12px; margin-bottom:18px; }
+  #levelGrid { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-bottom:14px; }
+  .lvbtn { background:linear-gradient(#2e343a,#22262b); border:1px solid #59636d; border-radius:7px; color:#e8ebee; padding:11px 8px; text-align:left; cursor:pointer; box-shadow:inset 0 1px 0 rgba(255,255,255,.07); }
+  .lvbtn b { display:block; font-size:14px; margin-bottom:4px; }
+  .lvbtn small { display:block; font-size:11px; color:#ffd94d; line-height:1.4; }
+  .lvbtn:disabled { opacity:.45; cursor:default; }
+  .lvbtn:disabled small { color:#8b95a0; }
+  .lvbtn:not(:disabled):active { filter:brightness(1.35); }
+  #endlessBtn { width:100%; background:linear-gradient(#5c2320,#3d1714); border:1px solid #c0574a; border-radius:7px; color:#ffd9d2; padding:13px 10px; cursor:pointer; text-align:left; }
+  #endlessBtn b { display:block; font-size:15px; margin-bottom:4px; }
+  #endlessBtn small { display:block; font-size:11px; color:#ffb09e; }
+  #menu .howto { margin-top:18px; font-size:11px; color:#77828d; line-height:1.7; text-align:left; }
+  #menu .ver { margin-top:12px; font-size:11px; color:#5d6874; }
+  #boardBtn { width:100%; margin-top:9px; background:linear-gradient(#2e343a,#22262b); border:1px solid #59636d; border-radius:7px; color:#e8ebee; padding:12px 10px; cursor:pointer; text-align:left; }
+  #boardBtn b { display:block; font-size:15px; margin-bottom:4px; }
+  #boardBtn small { display:block; font-size:11px; color:#9fb2c8; }
+  /* 排行榜页 */
+  #board { display:none; position:absolute; inset:0; background:rgba(10,12,14,.97); z-index:30; padding:22px 16px; overflow-y:auto; }
+  #board h2 { font-size:22px; color:#ffd94d; letter-spacing:3px; text-align:center; margin-bottom:6px; }
+  #boardMine { text-align:center; color:#7db4f0; font-size:13px; margin-bottom:12px; min-height:18px; }
+  .brow { display:flex; align-items:center; gap:10px; padding:7px 9px; border-bottom:1px solid #2b3036; font-size:14px; color:#e8ebee; }
+  .brow .rk { width:30px; color:#ffd94d; font-weight:bold; }
+  .brow .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .brow .sc { color:#ffd94d; }
+  .brow.me { background:rgba(47,111,208,.25); }
+  .brow.dim { color:#8b95a0; font-size:12px; justify-content:center; text-align:center; }
+  #boardClose { display:block; margin:18px auto 0; padding:11px 34px; font-size:15px; background:linear-gradient(#3a4046,#2c3136); color:#e8ebee; border:1px solid #59636d; border-radius:6px; cursor:pointer; }
+  /* 续命抉择条 */
+  #revivebar { display:none; background:#5c1710; color:#ffe9e4; font-size:13px; padding:8px; align-items:center; gap:8px; border-bottom:2px solid #c0574a; }
+  #revivebar span { flex:1; line-height:1.45; }
+  #revivebar button { flex:none; border-radius:5px; padding:8px 12px; font-size:13px; font-weight:bold; cursor:pointer; }
+  #adReviveBtn { background:#ffd94d; color:#5c1710; border:1px solid #fff2b0; }
+  #reviveGiveUp { background:#2c3136; color:#e8ebee; border:1px solid #59636d; }
+  /* 广告行与双倍结算钮 */
+  #adRow { margin-bottom:5px; }
+  #adStartBtn { width:100%; background:linear-gradient(#8a6a1c,#6d5416); color:#fff3cf; border:1px solid #d8b91e; border-radius:5px; padding:8px 2px; font-size:12px; cursor:pointer; }
+  #adStartBtn:disabled { opacity:.5; }
+  #adDoubleBtn { background:linear-gradient(#8a6a1c,#6d5416); border-color:#d8b91e; color:#fff3cf; }
+  /* toast */
+  #toast { display:none; position:absolute; left:50%; transform:translateX(-50%); bottom:196px; max-width:88%; background:rgba(16,20,24,.94); color:#ffeeba; border:1px solid #d8b91e; border-radius:6px; padding:9px 14px; font-size:13px; text-align:center; z-index:40; line-height:1.5; }
+  #tip { font-size:11px; color:#77828d; padding:4px 8px 8px; line-height:1.5; background:#14171b; }
+</style>
+</head>
+<body>
+<div id="phone">
+  <div id="hud">
+    <div class="row">
+      <div class="res">💰 <b id="funds" class="num">0</b></div>
+      <div class="res" id="powwrap">⚡ <span id="power" class="num">0/0</span><span id="powbar"><span id="powfill" class="seg grn" style="display:block;"></span></span></div>
+      <div class="res">👥 <span id="pop" class="num">0/25</span></div>
+      <div class="res">⏱ <span id="clock" class="num">0:00</span></div>
+    </div>
+    <div class="row" style="margin-top:4px;">
+      <div class="hqbar" id="enemyHQ"><div style="width:100%"></div><span>🎯进攻目标·敌指挥中心</span></div>
+      <div class="hqbar" id="myHQ"><div style="width:100%"></div><span>我方指挥中心</span></div>
+    </div>
+  </div>
+  <div id="wavebar">在选关屏选择关卡开始</div>
+  <div id="tutbar"></div>
+  <div id="warn">⚠ 己方建筑正受攻击！</div>
+  <div id="revivebar"><span>💥 指挥中心已陷落！本局仅一次续命机会——</span><button id="adReviveBtn">📺 看广告续命（回 30%）</button><button id="reviveGiveUp">放弃结算</button></div>
+  <div id="placebar"><span id="placetip"></span><button id="cancelPlace">✕ 取消建造</button></div>
+  <div id="stage">
+    <div id="banner"></div>
+    <div id="fps"></div>
+    <canvas id="cv" width="480" height="500"></canvas>
+    <canvas id="minimap" width="26" height="170"></canvas>
+    <div id="over">
+      <h1 id="overTitle">胜利</h1>
+      <div id="overStars"></div>
+      <p id="overStats"></p>
+      <div class="btns">
+        <button id="restartBtn">再来一局</button>
+        <button id="nextBtn">下一关 ▶</button>
+        <button id="adDoubleBtn" style="display:none;">📺 看广告 · 星数翻倍结算</button>
+        <button id="menuBtn">返回选关</button>
+      </div>
+    </div>
+  </div>
+  <div id="ctrl">
+    <div id="adRow"><button id="adStartBtn" style="display:none;">📺 看广告 · 开局资金 +200</button></div>
+    <div id="swRow"><button id="swBtn" disabled>💥 全线轰炸 · <small>充能中 0%</small></button></div>
+    <div class="btnrow" id="squads">
+      <button data-squad="all">全军</button>
+      <button data-squad="inf">步兵队</button>
+      <button data-squad="rocket">火箭队</button>
+      <button data-squad="armor">装甲队</button>
+      <button id="rallyBtn">⚑集结点</button>
+    </div>
+    <div class="btnrow"><div class="lbl">建造（点卡片 → 点地图空地）</div></div>
+    <div class="btnrow" id="buildRow"></div>
+    <div class="btnrow"><div class="lbl">造兵（点按钮进队列，上限 5，自动派给对应工厂）</div></div>
+    <div class="btnrow" id="prodRow"></div>
+  </div>
+  <div id="tip">操作：点编队键=整队，长按=半队；点自家兵=单选。点空地=移动，双击空地=攻击前进，点敌人=集火。拖动地图滚动，右侧雷达竖条点按跳转。集火＞攻击者＞最近＞建筑。建造中可点顶部「取消建造」或按 Esc 退出放置。</div>
+  <div id="menu">
+    <h1>全线压上</h1>
+    <div class="sub">竖屏即时战略 · 战役 8 关 ＋ 无尽防线</div>
+    <div class="faction">远征军（蓝） VS 赤铁洪流（红）</div>
+    <div id="levelGrid"></div>
+    <button id="endlessBtn"><b>🌊 无尽防线</b><small id="endlessInfo">波次无尽递增，守住指挥中心</small></button>
+    <button id="dailyBtn"><b>📅 每日挑战</b><small id="dailyInfo">每日一关 · 完成奖纪念星 ★1（每日挑战·本地记录）</small></button>
+    <button id="boardBtn"><b>🏆 无尽排行榜</b><small>全站单局最佳分榜 · 结算自动上报</small></button>
+    <div class="howto">玩法：造兵编队、占领增益站（精炼收入 +30%）、拆光敌方建筑、摧毁敌指挥中心获胜；自家指挥中心被毁判负。克制公示：步兵打装甲 ×0.3、打建筑 ×0.5；火箭兵打装甲 ×2.4。低电时建造/生产/精炼收入全部减半，雷达同时离线。</div>
+    <div class="howto">更新：新增超级武器「全线轰炸」（充能 120 秒，点按钮瞄准落点；第 8 关敌方也会用，注意红色预警圈躲避）＋每日挑战（每日一关带修饰，完成奖纪念星）。</div>
+    <div class="ver">v1.1 首更 · 战役 8 关 ＋ 无尽防线 ＋ 每日挑战 ＋ 超级武器</div>
+  </div>
+  <div id="board">
+    <h2>🏆 无尽排行榜</h2>
+    <div id="boardMine"></div>
+    <div id="boardList"></div>
+    <button id="boardClose">返回</button>
+  </div>
+  <div id="toast"></div>
+</div>
+<script>
+'use strict';
+/* 《全线压上》M4 首更 — 冻结规格见 ../设计案v1.1-冻结版.md，施工口径见 ../M4施工书-首更.md
+   数值唯一事实源 = CFG（单位/建筑面板与克制矩阵为冻结值，一字未动）；
+   关卡差异只写 CFG.levels；资金只走 economy；存档只走 save；平台调用只走 platform 分段；
+   超武伤害只走 superweapon.strikeDamage 单点。
+   M4 变更：超级武器「全线轰炸」、每日挑战（本地版）、美术润色批、无尽出生点修复、L1 分步教学。
+   （M3 基线：地图 16×26、原版行为级细节、虎扑后端接入，见 ../m3/README.md。） */
+
+// ============ module: config ============
+const CFG = {
+  cols: 16, rows: 26, cell: 30,            // 世界 480x780（M3 放大，中场加长），视口高 500，纵向滚动
+  viewH: 500,
+  popCap: 25,                                // 双方各上限
+  buildRadius: 7,                            // 距指挥中心格数
+  queueCap: 5,
+  acquireTick: 0.2,                          // 索敌节流秒
+  sight: 4.5,                                // 索敌视野（格）
+  roadSpeedMul: 1.2,                         // 路面加速
+  lowPowerMul: 0.5,                          // 低电：生产/建造/精炼收入系数
+  loot: 150,                                 // 拆敌建筑奖励
+  hqRepair: 2,                               // HQ 自修 /s
+  boostRadius: 2.2,                          // 增益站半径（格）
+  boostCaptureTime: 4,                       // 占领所需秒（无争议）
+  boostIncomeMul: 1.3,                       // 归属方精炼收入加成（任一站驻守生效，不叠加）
+  buildings: {
+    hq:      { name:'指挥中心', short:'指', cost:0,   hp:2000, power:50,   buildTime:0,  size:3, dps:0,  range:0 },
+    power:   { name:'电厂',     short:'电', cost:300, hp:600,  power:100,  buildTime:5,  size:2, dps:0,  range:0 },
+    refinery:{ name:'精炼厂',   short:'精', cost:500, cost2:750, hp:800, power:-20, buildTime:8, size:2, dps:0, range:0, income:32, incomeEvery:5, maxOwn:2 },
+    barracks:{ name:'兵营',     short:'兵', cost:400, hp:700,  power:-20,  buildTime:8,  size:2, dps:0,  range:0 },
+    factory: { name:'战车厂',   short:'车', cost:600, hp:900,  power:-30,  buildTime:10, size:2, dps:0,  range:0 },
+    tower:   { name:'机枪塔',   short:'塔', cost:350, hp:500,  power:-10,  buildTime:6,  size:1, dps:18, range:4 },
+  },
+  units: {
+    inf:    { name:'步兵',     short:'步', cost:100, hp:120, dps:10, range:2, buildTime:3,  speed:2.2, from:'barracks', cls:'inf',    squad:'inf' },
+    rocket: { name:'火箭兵',   short:'火', cost:200, hp:140, dps:14, range:3, buildTime:5,  speed:2.0, from:'barracks', cls:'inf',    squad:'rocket' },
+    ltank:  { name:'轻型坦克', short:'坦', cost:400, hp:450, dps:22, range:3, buildTime:8,  speed:1.8, from:'factory',  cls:'armor',  squad:'armor' },
+    htank:  { name:'重型坦克', short:'重', cost:700, hp:900, dps:35, range:3, buildTime:12, speed:1.3, from:'factory',  cls:'armor',  squad:'armor' },
+  },
+  // 伤害矩阵：仅冻结三条，其余 ×1。装甲类 = cls 'armor'；建筑 target.kind='building'
+  damageMatrix: { inf_vs_armor: 0.3, inf_vs_building: 0.5, rocket_vs_armor: 2.4 },
+  // 无尽（冻结口径：预算 ×1.13 递增＋封顶；计分＝波次×500＋击毁造价÷20＋存活分钟×20，上限 50000；每 5 波 1 纪念星）
+  endless: { startBudget: 600, growth: 1.13, budgetCap: 6000, firstWaveT: 20, waveGap: 18, scoreCap: 50000, starEvery: 5, startFunds: 800 },
+  // 广告点位与 P0 核对参数（点位内容见 M3 施工书 §三；核对口径同拼将三作 v5.22，见 platform 分段）
+  ad: { startBonus: 200, reviveHpFrac: 0.3, queueCap: 5, gateMs: 3 * 60 * 1000, gateChecks: 2, ttlMs: 12 * 3600 * 1000 },
+  // 超级武器「全线轰炸」（M4 首更，数值见 M4 施工书）：充能 120s；预警 0.8s；半径 2.5 格；
+  // 单位伤害 500（中立伤害类型，走伤害函数但不吃克制系数）；建筑单次承伤钳制 min(500, 最大HP×25%)，打不爆 HQ。
+  // 敌方仅 L8（levelIdx 7）：t=240 起、每 180s 对玩家聚集区使用同款（红色预警可躲）。
+  superweapon: { chargeTime: 120, warnTime: 0.8, radius: 2.5, unitDmg: 500, bldDmgFrac: 0.25, enemyStart: 240, enemyEvery: 180 },
+  // 每日挑战（M4 首更，本地版）：日期种子选 8 关之一＋修饰符五选一；完成奖纪念星 ×1（与无尽纪念星同账 totalStars）
+  daily: { mods: [
+    { key: 'tower',    name: '敌塔强化' },
+    { key: 'funds',    name: '起始资金+300' },
+    { key: 'refinery', name: '双倍精炼' },
+    { key: 'waves',    name: '敌波次加密' },
+    { key: 'station',  name: '增益站×1.5' },
+  ] },
+  // 关卡表（差异只在此处；缺省敌布局：HQ(5,0) 电厂(2,0) 精炼(10,0) 兵营(9,3)，塔位见 towers）
+  levels: [
+    { name:'全线压上', startFunds:600, preBarracks:true,  parTime:360,
+      towers:[{gx:7,gy:5}], towerHpMul:0.7, stations:[{cx:7.5,cy:13.5}], walls:'standard',
+      outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5}],
+      waves:[ {t:85, comp:{inf:3}, label:'第1波反扑'}, {t:200, comp:{inf:3,rocket:2}, label:'第2波反扑'} ],
+      prodStart:190, prodEvery:60, prodCycle:['inf','inf','rocket','inf','ltank'] },
+    { name:'双炉并进', startFunds:700, preBarracks:false, parTime:420, eRef2:true,
+      towers:[{gx:7,gy:5}], towerHpMul:0.85, stations:[{cx:7.5,cy:13.5}], walls:'standard',
+      outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:7.5,y:6.8}],
+      waves:[ {t:120, comp:{inf:4}, label:'第1波反扑'}, {t:210, comp:{inf:3,rocket:2}, label:'第2波反扑'}, {t:300, comp:{inf:4,rocket:2}, label:'第3波反扑'} ],
+      prodStart:170, prodEvery:50, prodCycle:['inf','rocket','inf','inf','rocket'] },
+    { name:'双站之争', startFunds:700, preBarracks:false, parTime:420,
+      towers:[{gx:7,gy:5}], towerHpMul:0.85, stations:[{cx:4.5,cy:13.5},{cx:11.5,cy:13.5}], walls:'standard',
+      outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'rocket',x:7.5,y:6.8}],
+      waves:[ {t:130, comp:{inf:4}, label:'第1波反扑'}, {t:230, comp:{inf:3,rocket:3}, label:'第2波反扑'}, {t:320, comp:{inf:4,rocket:2}, label:'第3波反扑'} ],
+      prodStart:180, prodEvery:55, prodCycle:['inf','inf','rocket','rocket','inf'] },
+    { name:'铁甲首秀', startFunds:800, preBarracks:false, parTime:450, eFactory:true,
+      towers:[{gx:7,gy:5}], towerHpMul:0.9, stations:[{cx:7.5,cy:13.5}], walls:'standard',
+      outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:7.5,y:6.8}],
+      waves:[ {t:140, comp:{inf:3,rocket:1}, label:'第1波反扑'}, {t:240, comp:{inf:3,rocket:2}, label:'第2波反扑'}, {t:330, comp:{inf:3,rocket:2,ltank:1}, label:'第3波反扑'} ],
+      prodStart:200, prodEvery:62, prodCycle:['inf','rocket','inf','ltank','inf','rocket'] }, // M4 校准 CAL-004：第2波撤轻坦（装甲首秀延至第3波）、持续出兵 55→62s（双 bot 皆败且 HQ 被推平，见 BUG_LOG）
+    { name:'双塔防线', startFunds:800, preBarracks:false, parTime:480, eFactory:true,
+      towers:[{gx:7,gy:5},{gx:4,gy:6}], towerHpMul:0.9, stations:[{cx:7.5,cy:13.5}], walls:'standard',
+      outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'rocket',x:7.5,y:6.8}],
+      waves:[ {t:140, comp:{inf:4,rocket:1}, label:'第1波反扑'}, {t:250, comp:{inf:3,rocket:2,ltank:1}, label:'第2波反扑'}, {t:340, comp:{inf:4,rocket:3,ltank:1}, label:'第3波反扑'} ],
+      prodStart:190, prodEvery:50, prodCycle:['inf','rocket','ltank','inf','rocket'] },
+    { name:'隘口', startFunds:900, preBarracks:false, parTime:480, eFactory:true,
+      towers:[{gx:7,gy:5}], towerHpMul:1.0, stations:[{cx:7.5,cy:13.5}], walls:'chokepoint',
+      outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:7.5,y:6.8}],
+      waves:[ {t:150, comp:{inf:4,rocket:2}, label:'第1波反扑'}, {t:260, comp:{inf:3,rocket:2,ltank:1}, label:'第2波反扑'}, {t:360, comp:{inf:4,rocket:3,ltank:2}, label:'第3波反扑'} ],
+      prodStart:200, prodEvery:50, prodCycle:['rocket','inf','ltank','inf','rocket'] },
+    { name:'速攻营', startFunds:900, preBarracks:false, parTime:510, eBarracks2:true, eFactory:true,
+      towers:[{gx:7,gy:5}], towerHpMul:1.0, stations:[{cx:4.5,cy:13.5},{cx:11.5,cy:13.5}], walls:'fortified',
+      outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:6.5,y:6.8},{type:'rocket',x:8.5,y:6.8}],
+      waves:[ {t:130, comp:{inf:5,rocket:2}, label:'第1波反扑'}, {t:240, comp:{inf:4,rocket:3,ltank:1}, label:'第2波反扑'}, {t:340, comp:{inf:5,rocket:3,ltank:2}, label:'第3波反扑'} ],
+      prodStart:150, prodEvery:38, prodCycle:['inf','inf','rocket','ltank','inf','rocket'] },
+    { name:'赤铁决战', startFunds:1000, preBarracks:false, parTime:540, eRef2:true, eFactory:true,
+      towers:[{gx:7,gy:5},{gx:4,gy:6}], towerHpMul:0.9, stations:[{cx:4.5,cy:13.5},{cx:11.5,cy:13.5}], walls:'standard',
+      outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:6.5,y:6.8},{type:'rocket',x:8.5,y:6.8}],
+      waves:[ {t:160, comp:{inf:4,rocket:2}, label:'第1波反扑'}, {t:260, comp:{inf:4,rocket:3,ltank:1}, label:'第2波反扑'}, {t:380, comp:{inf:5,rocket:4,ltank:1,htank:1}, label:'第3波反扑'}, {t:480, comp:{inf:5,rocket:4,ltank:2,htank:1}, label:'决战总攻'} ],
+      prodStart:210, prodEvery:64, prodCycle:['inf','rocket','ltank','rocket','htank','inf'] }, // M4 校准 CAL-005（三轮）：塔系数 1.0→0.9、第3波轻坦 2→1、第2波轻坦 2→1、第1波步兵 5→4、波次整体后移 10–20s、持续出兵 45→64s 且起始 170→210s（双 bot 皆败且 HQ 被推平，见 BUG_LOG）
+  ],
+};
+
+// ============ 纯逻辑（Node 可测）：伤害计算 ============
+function damageMultiplier(attType, target) {
+  // target: {kind:'unit'|'building', cls:'inf'|'armor'|undefined, type}
+  const M = CFG.damageMatrix;
+  if (target.kind === 'building') return attType === 'inf' ? M.inf_vs_building : 1;
+  if (target.cls === 'armor') {
+    if (attType === 'inf') return M.inf_vs_armor;
+    if (attType === 'rocket') return M.rocket_vs_armor;
+  }
+  return 1;
+}
+function dpsAgainst(attType, target) { return CFG.units[attType].dps * damageMultiplier(attType, target); }
+// 精炼回本（秒）：造价 / (每秒收入)
+function refineryPayback(which) {
+  const c = which === 2 ? CFG.buildings.refinery.cost2 : CFG.buildings.refinery.cost;
+  return c / (CFG.buildings.refinery.income / CFG.buildings.refinery.incomeEvery);
+}
+// 三星结算（纯逻辑）：胜 1 星起步；HQ 血量 ≥50% +1；时长 ≤ parTime +1
+function calcStars(hqFrac, time, parTime) { return 1 + (hqFrac >= 0.5 ? 1 : 0) + (time <= parTime ? 1 : 0); }
+// 无尽：第 n 波预算（×1.13 递增，封顶）
+function endlessBudgetFor(n) { return Math.min(CFG.endless.budgetCap, Math.round(CFG.endless.startBudget * Math.pow(CFG.endless.growth, Math.max(0, n - 1)))); }
+// 无尽：第 n 波编成（确定性购买：重坦/轻坦先行点缀，其余步兵与火箭兵交替填满）
+function endlessWaveComp(n, budget) {
+  const comp = {}; let left = budget;
+  const buy = t => { const c = CFG.units[t].cost; if (left >= c) { comp[t] = (comp[t] || 0) + 1; left -= c; return true; } return false; };
+  if (n >= 5) buy('htank');
+  if (n >= 3) buy('ltank');
+  if (n >= 4) buy('ltank');
+  let flip = false;
+  while (left >= CFG.units.inf.cost) { const t = flip ? 'rocket' : 'inf'; if (!buy(t) && !buy(flip ? 'inf' : 'rocket')) break; flip = !flip; }
+  return comp;
+}
+// 无尽计分（冻结公式）：波次×500＋击毁造价÷20＋存活分钟×20，上限 50000
+function endlessScore(wave, killCost, timeSec) {
+  return Math.min(CFG.endless.scoreCap, wave * 500 + Math.floor(killCost / 20) + Math.floor(timeSec / 60) * 20);
+}
+
+// ============ module: economy（资金唯一出入口，带 reason） ============
+function createEconomy(startFunds) {
+  return {
+    funds: startFunds, totalEarned: startFunds, totalSpent: 0, log: [],
+    earn(n, reason) { this.funds += n; this.totalEarned += n; this.log.push({ op:'earn', n, reason }); return true; },
+    spend(n, reason) { if (this.funds < n) return false; this.funds -= n; this.totalSpent += n; this.log.push({ op:'spend', n, reason }); return true; },
+    check() { return Math.abs(this.funds - (this.totalEarned - this.totalSpent)) < 1e-9; },
+  };
+}
+
+// ============ 纯逻辑：小队对拼模拟（与游戏内同一伤害函数；空间近似：双排对进、索敌取最近、射程外推进） ============
+function mulberry32(seed) { let a = seed >>> 0; return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function simulateBattle(teamA, teamB, seed) {
+  const rnd = mulberry32(seed == null ? 1 : seed);
+  function mk(types, side, yBase) {
+    return types.map((type, i) => {
+      const s = CFG.units[type];
+      // 混编/对手布阵口径：装甲在前、其余在后（与游戏内玩家常规布阵一致，坦克承伤）
+      const rowOff = s.cls === 'armor' ? 0 : 1.6;
+      return { type, side, hp: s.hp, maxHp: s.hp, cls: s.cls, kind: 'unit',
+               x: 3 + (i % 7) * 1.4 + rnd() * 0.5, y: side === 'A' ? yBase - rowOff : yBase + rowOff, target: null, retarget: 0 };
+    });
+  }
+  const A = mk(teamA, 'A', 4), B = mk(teamB, 'B', 14);
+  const all = A.concat(B), dt = 0.05; let t = 0;
+  const alive = u => u.hp > 0;
+  while (t < 600) {
+    const aAlive = A.some(alive), bAlive = B.some(alive);
+    if (!aAlive || !bAlive) return { winner: aAlive ? 'A' : (bAlive ? 'B' : 'draw'), time: t };
+    for (const u of all) {
+      if (!alive(u)) continue;
+      const foes = (u.side === 'A' ? B : A).filter(alive);
+      u.retarget -= dt;
+      if (!u.target || !alive(u.target) || u.retarget <= 0) {
+        let best = null, bd = 1e9;
+        for (const f of foes) { const d = Math.hypot(f.x - u.x, f.y - u.y); if (d < bd) { bd = d; best = f; } }
+        u.target = best; u.retarget = CFG.acquireTick;
+      }
+      if (!u.target) continue;
+      const s = CFG.units[u.type], d = Math.hypot(u.target.x - u.x, u.target.y - u.y);
+      if (d > s.range + 0.3) { const vx = (u.target.x - u.x) / d, vy = (u.target.y - u.y) / d; u.x += vx * s.speed * dt; u.y += vy * s.speed * dt; }
+      else u.target.hp -= dpsAgainst(u.type, u.target) * dt;
+    }
+    t += dt;
+  }
+  return { winner: 'draw', time: t };
+}
+
+// ============ module: grid（地图/障碍/BFS 寻路） ============
+// 地图口径：row0=敌方（上），row21=己方（下）。墙体按关卡变体生成，挂 state.obstacles。
+function buildObstacles(kind) {
+  // M3 16×26 坐标：敌半区 gy 不变、己半区 +4、中场墙 +2（锚定规则见 BUG_LOG CAL-003）
+  const s = new Set(); const add = (x, y) => s.add(x + ',' + y);
+  const wallRow = (y, gaps) => { for (let x = 0; x < CFG.cols; x++) if (!gaps.some(([a, b]) => x >= a && x <= b)) add(x, y); };
+  if (kind === 'chokepoint') { // 隘口：三道横墙错位开口，纵路在两条公路间蛇形贯通
+    wallRow(10, [[10, 11]]); wallRow(14, [[4, 5]]); wallRow(20, [[7, 8]]);
+    [[2,5],[13,5],[2,22],[13,22],[7,3],[8,3]].forEach(([x, y]) => add(x, y));
+  } else if (kind === 'fortified') { // 速攻营：标准隘口墙＋中场散布岩体
+    wallRow(11, [[4, 5], [10, 11]]);
+    [[2,5],[3,5],[12,5],[13,5],[2,16],[13,16],[1,14],[14,14],[7,15],[8,15],[4,21],[11,21],[6,6],[9,6]].forEach(([x, y]) => add(x, y));
+  } else { // standard：row11 隘口墙，两处 2 格窄口（对齐双纵路）
+    wallRow(11, [[4, 5], [10, 11]]);
+    [[2,5],[3,5],[12,5],[13,5],[2,18],[13,18],[7,20],[8,20],[1,14],[14,14]].forEach(([x, y]) => add(x, y));
+  }
+  return s;
+}
+const OBSTACLES = buildObstacles('standard'); // 无 state 时的兜底（与 M1 一致）
+const ROAD_COLS = [4, 5, 10, 11]; // 双纵路列（绘制与加速共用）
+const ROAD = (() => { const s = new Set(); for (let y = 0; y < CFG.rows; y++) ROAD_COLS.forEach(x => s.add(x + ',' + y)); return s; })();
+const ORE = [{ x: 13.3, y: 21.2 }, { x: 13.3, y: 2.6 }, { x: 1.4, y: 13.2 }, { x: 13.3, y: 12.6 }]; // 金黄矿点（近双方精炼厂＋中场两侧；采矿车循环取最近点）
+const key = (x, y) => x + ',' + y;
+function blockedGrid(state) {
+  const g = new Set(state && state.obstacles ? state.obstacles : OBSTACLES);
+  for (const b of state.buildings) if (b.hp > 0) for (let x = b.gx; x < b.gx + b.size; x++) for (let y = b.gy; y < b.gy + b.size; y++) g.add(key(x, y));
+  return g;
+}
+function findPath(state, sx, sy, tx, ty) {
+  const blocked = blockedGrid(state);
+  const sk = key(sx, sy); let tk = key(tx, ty);
+  if (blocked.has(tk)) { // 目标被占：找最近可达邻格
+    let found = null;
+    for (let r = 1; r <= 3 && !found; r++) for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+      const nx = tx + dx, ny = ty + dy, k = key(nx, ny);
+      if (nx >= 0 && ny >= 0 && nx < CFG.cols && ny < CFG.rows && !blocked.has(k)) { found = k; break; }
+    }
+    if (!found) return []; tk = found;
+  }
+  if (sk === tk) return [{ x: tx, y: ty }];
+  const prev = new Map([[sk, null]]), q = [[sx, sy]];
+  while (q.length) {
+    const [x, y] = q.shift();
+    if (key(x, y) === tk) break;
+    for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const nx = x + dx, ny = y + dy, k = key(nx, ny);
+      if (nx < 0 || ny < 0 || nx >= CFG.cols || ny >= CFG.rows || prev.has(k) || blocked.has(k)) continue;
+      prev.set(k, key(x, y)); q.push([nx, ny]);
+    }
+  }
+  if (!prev.has(tk)) return [];
+  const path = []; let cur = tk;
+  while (cur) { const [x, y] = cur.split(',').map(Number); path.unshift({ x: x + 0.5, y: y + 0.5 }); cur = prev.get(cur); }
+  path.shift(); return path;
+}
+
+// ============ module: save（存档唯一出入口；localStorage 键 quanxian_save_v1） ============
+const SAVE_KEY = 'quanxian_save_v1';
+function defaultSave() { return { unlocked: 1, stars: [0, 0, 0, 0, 0, 0, 0, 0], endlessBest: 0, endlessStars: 0, totalStars: 0, daily: { date: '', done: false }, tutorial: { build: false, squad: false, focus: false } }; }
+function normalizeSave(raw) { // 容错：任何脏数据都收敛到合法形状
+  const d = defaultSave(); if (!raw || typeof raw !== 'object') return d;
+  const clampInt = (v, lo, hi) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : lo; };
+  d.unlocked = clampInt(raw.unlocked, 1, 8);
+  if (Array.isArray(raw.stars)) for (let i = 0; i < 8; i++) d.stars[i] = clampInt(raw.stars[i], 0, 3);
+  d.endlessBest = clampInt(raw.endlessBest, 0, 999999999);
+  d.endlessStars = clampInt(raw.endlessStars, 0, 9999);
+  d.totalStars = clampInt(raw.totalStars, 0, 99999); // 纪念星总账（无尽每局所获＋每日挑战奖励，同账累计）
+  if (raw.daily && typeof raw.daily === 'object') { // 每日挑战完成状态（M4）
+    const dt = String(raw.daily.date || '');
+    d.daily = { date: /^\d{8}$/.test(dt) ? dt : '', done: raw.daily.done === true };
+  }
+  if (raw.tutorial && typeof raw.tutorial === 'object') { // L1 分步教学已触发标记（M4）
+    d.tutorial = { build: raw.tutorial.build === true, squad: raw.tutorial.squad === true, focus: raw.tutorial.focus === true };
+  }
+  return d;
+}
+function pickStorage(storage) { if (storage) return storage; try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } }
+function loadSave(storage) { const s = pickStorage(storage); if (!s) return defaultSave(); try { return normalizeSave(JSON.parse(s.getItem(SAVE_KEY) || 'null')); } catch (e) { return defaultSave(); } }
+function saveSave(data, storage) { const s = pickStorage(storage); if (s) { try { s.setItem(SAVE_KEY, JSON.stringify(normalizeSave(data))); } catch (e) {} } return true; }
+
+// ============ module: battle（状态/初始化/关卡载入） ============
+let S = null, uidSeq = 1;
+function mkBuilding(state, type, side, gx, gy, built) {
+  const c = CFG.buildings[type];
+  const b = { id: uidSeq++, kind: 'building', type, side, gx, gy, size: c.size, hp: c.hp, maxHp: c.hp,
+              x: gx + c.size / 2, y: gy + c.size / 2, cls: 'building', queue: [], progress: 0,
+              building: !built, hurtT: -99, clsKey: 'building' };
+  state.buildings.push(b); return b;
+}
+function mkUnit(state, type, side, x, y) {
+  const c = CFG.units[type];
+  const u = { id: uidSeq++, kind: 'unit', type, side, x, y, hp: c.hp, maxHp: c.hp, cls: c.cls,
+              order: { type: 'idle' }, path: [], pathT: 0, combatTarget: null, acquireT: Math.random() * 0.2,
+              lastAttackerId: 0, tracerT: 0 };
+  state.units.push(u); return u;
+}
+function skeletonState(mode) {
+  uidSeq = 1;
+  return { time: 0, over: false, result: null, kills: 0, killCost: 0, losses: 0, mode, levelIdx: 0,
+           ecoP: createEconomy(0), ecoE: createEconomy(9999),
+           buildings: [], units: [], selection: [], camY: 0, introT: 0,
+           stations: [], obstacles: buildObstacles('standard'),
+           waves: [], waveIdx: 0, enemyProdT: 0, enemyProdIdx: 0, enemyPending: [], fx: [], fxTexts: [], fxRings: [], fxBooms: [], harvesters: [], warnT: -99, firstShotT: null,
+           outpost: [], rally: { x: 7.5, y: 19.5 }, variant: 0, waveRoute: 'hq',
+           adStartUsed: false, reviveUsed: false, reviveOffer: false,
+           sw: { charge: 0, ready: false }, swPending: [], swEnemyNext: CFG.superweapon.enemyStart,
+           daily: null, dailyIncomeMul: 1, boostMul: 1, endlessSpawnAlt: 0,
+           prodStart: 1e9, prodEvery: 60, prodCycle: ['inf'], endless: null };
+}
+// 关卡覆写唯一入口：布局/波次/地形/增益站/敌脚本参数全部在此按 CFG.levels[idx] 落位
+function applyLevel(state, idx) {
+  const L = CFG.levels[idx];
+  state.levelIdx = idx;
+  state.ecoP = createEconomy(L.startFunds);
+  state.obstacles = buildObstacles(L.walls);
+  state.stations = L.stations.map(s => ({ cx: s.cx, cy: s.cy, owner: null, prog: 0 }));
+  // 敌脚本每关 2 变体（冻结口径）：变体1 = 首波经增益站路线压上＋首波+1步兵＋持续出兵间隔×0.92
+  state.variant = Math.random() < 0.5 ? 0 : 1;
+  state.waveRoute = state.variant === 1 ? 'station' : 'hq';
+  state.waves = L.waves.map(w => ({ t: w.t, label: w.label, comp: Object.assign({}, w.comp) }));
+  if (state.variant === 1 && state.waves.length) state.waves[0].comp.inf = (state.waves[0].comp.inf || 0) + 1;
+  state.enemyProdT = L.prodStart;
+  state.prodStart = L.prodStart; state.prodEvery = L.prodEvery * (state.variant === 1 ? 0.92 : 1); state.prodCycle = L.prodCycle;
+  // 己方（下，距南端线锚定同 M2：行 +4）：HQ(6,23) 电厂(3,23) 精炼(11,23)；第1关特别口径另预置兵营＋3 步兵（冻结）
+  mkBuilding(state, 'hq', 'P', 6, 23, true); mkBuilding(state, 'power', 'P', 3, 23, true); mkBuilding(state, 'refinery', 'P', 11, 23, true);
+  if (L.preBarracks) {
+    mkBuilding(state, 'barracks', 'P', 3, 19, true);
+    [[6.5, 21.5], [7.5, 21.2], [8.5, 21.5]].forEach(([x, y]) => mkUnit(state, 'inf', 'P', x, y));
+  }
+  // 敌方（上，距北端线锚定不变、x 按新中心 +1）：HQ(6,0) 电厂(3,0) 精炼(11,0) 兵营(10,3)，其余按关卡覆写
+  mkBuilding(state, 'hq', 'E', 6, 0, true); mkBuilding(state, 'power', 'E', 3, 0, true); mkBuilding(state, 'refinery', 'E', 11, 0, true);
+  if (L.eRef2) mkBuilding(state, 'refinery', 'E', 13, 0, true);
+  mkBuilding(state, 'barracks', 'E', 10, 3, true);
+  if (L.eBarracks2) mkBuilding(state, 'barracks', 'E', 6, 3, true);
+  if (L.eFactory) mkBuilding(state, 'factory', 'E', 13, 3, true);
+  for (const tp of L.towers) { const tw = mkBuilding(state, 'tower', 'E', tp.gx, tp.gy, true); tw.hp = tw.maxHp = Math.round(tw.maxHp * L.towerHpMul); }
+  state.outpost = L.outpost.map(o => mkUnit(state, o.type, 'E', o.x, o.y).id);
+  return state;
+}
+function initState(levelIdx) { const st = skeletonState('level'); return applyLevel(st, levelIdx == null ? 0 : levelIdx); }
+function initEndlessState() {
+  const st = skeletonState('endless');
+  st.ecoP = createEconomy(CFG.endless.startFunds);
+  st.stations = [{ cx: 7.5, cy: 13.5, owner: null, prog: 0 }];
+  st.endless = { wave: 0, budget: CFG.endless.startBudget, nextT: CFG.endless.firstWaveT, score: 0, stars: 0 };
+  // 己方防线：HQ/电厂/精炼/兵营预置＋3 步兵（无尽为防守模式，给玩家起步防线；锚定同战役）
+  mkBuilding(st, 'hq', 'P', 6, 23, true); mkBuilding(st, 'power', 'P', 3, 23, true);
+  mkBuilding(st, 'refinery', 'P', 11, 23, true); mkBuilding(st, 'barracks', 'P', 3, 19, true);
+  [[6.5, 21.5], [7.5, 21.2], [8.5, 21.5]].forEach(([x, y]) => mkUnit(st, 'inf', 'P', x, y));
+  // 敌方前进基地（无指挥中心：无尽只判己方 HQ 存亡）：电厂/精炼/兵营/战车厂/机枪塔
+  mkBuilding(st, 'power', 'E', 3, 0, true); mkBuilding(st, 'refinery', 'E', 11, 0, true);
+  mkBuilding(st, 'barracks', 'E', 10, 3, true); mkBuilding(st, 'factory', 'E', 13, 3, true); mkBuilding(st, 'tower', 'E', 7, 5, true);
+  return st;
+}
+function hqOf(state, side) { return state.buildings.find(b => b.type === 'hq' && b.side === side); }
+function powerInfo(state, side) {
+  let supply = 0, used = 0;
+  for (const b of state.buildings) { if (b.side !== side || b.hp <= 0 || b.building) continue; const p = CFG.buildings[b.type].power; if (p > 0) supply += p; else used += -p; }
+  return { supply, used, low: used > supply };
+}
+function refineryCount(state, side) { return state.buildings.filter(b => b.side === side && b.type === 'refinery' && b.hp > 0).length; }
+function popOf(state, side) { return state.units.filter(u => u.side === side && u.hp > 0).length; }
+function stationGarrison(state, stn, side) { return state.units.filter(u => u.side === side && u.hp > 0 && Math.hypot(u.x - stn.cx, u.y - stn.cy) <= CFG.boostRadius).length; }
+// 增益站加成：任一站归属且站内 ≥2 驻守即生效（双站不叠加，自选口径见 README）
+function boostActive(state, side) { return state.stations.some(stn => stn.owner === side && stationGarrison(state, stn, side) >= 2); }
+// 胜负判定（纯逻辑可测；无尽模式在 updateGame 内单独判己方 HQ）
+function checkWinner(state) {
+  const p = hqOf(state, 'P'), e = hqOf(state, 'E');
+  if (e && e.hp <= 0) return 'win';
+  if (p && p.hp <= 0) return 'lose';
+  return null;
+}
+
+// ============ module: buildings（建造/生产/精炼/塔） ============
+function buildingCost(state, type, side) {
+  const c = CFG.buildings[type];
+  if (type === 'refinery' && refineryCount(state, side) >= 1) return c.cost2;
+  return c.cost;
+}
+function canPlace(state, type, side, gx, gy) {
+  const c = CFG.buildings[type];
+  if (gx < 0 || gy < 0 || gx + c.size > CFG.cols || gy + c.size > CFG.rows) return false;
+  const hq = hqOf(state, side); if (!hq) return false;
+  const cx = gx + c.size / 2, cy = gy + c.size / 2;
+  if (Math.hypot(cx - hq.x, cy - hq.y) > CFG.buildRadius + c.size / 2) return false;
+  const blocked = blockedGrid(state);
+  for (let x = gx; x < gx + c.size; x++) for (let y = gy; y < gy + c.size; y++) if (blocked.has(key(x, y))) return false;
+  if (type === 'refinery' && refineryCount(state, side) >= CFG.buildings.refinery.maxOwn) return false;
+  return true;
+}
+function placeBuilding(state, type, gx, gy) {
+  const cost = buildingCost(state, type, 'P');
+  if (!canPlace(state, type, 'P', gx, gy)) return false;
+  if (!state.ecoP.spend(cost, 'build_' + type)) return false;
+  mkBuilding(state, type, 'P', gx, gy, false); return true;
+}
+function queueUnit(state, type, side) {
+  const from = CFG.units[type].from;
+  const facs = state.buildings.filter(b => b.side === side && b.type === from && b.hp > 0 && !b.building);
+  if (!facs.length) return false;
+  if (popOf(state, side) + facs.reduce((n, f) => n + f.queue.length, 0) >= CFG.popCap) return false;
+  const fac = facs.sort((a, b) => a.queue.length - b.queue.length)[0];
+  if (fac.queue.length >= CFG.queueCap) return false;
+  const eco = side === 'P' ? state.ecoP : state.ecoE;
+  if (side === 'P' && !eco.spend(CFG.units[type].cost, 'unit_' + type)) return false;
+  fac.queue.push(type); return true;
+}
+function updateBuildings(state, dt) {
+  for (const b of state.buildings) {
+    if (b.hp <= 0) continue;
+    const eco = b.side === 'P' ? state.ecoP : state.ecoE;
+    const low = powerInfo(state, b.side).low;
+    if (b.building) { b.progress += dt * (low ? CFG.lowPowerMul : 1); if (b.progress >= CFG.buildings[b.type].buildTime) { b.building = false; state.fxRings.push({ x: b.x, y: b.y, t: 0, max: 0.55, side: b.side }); } continue; }
+    if (b.type === 'hq') b.hp = Math.min(b.maxHp, b.hp + CFG.hqRepair * dt);
+    if (b.type === 'refinery' && b.side === 'P') {
+      b.incomeT = (b.incomeT || 0) + dt;
+      if (b.incomeT >= CFG.buildings.refinery.incomeEvery) {
+        b.incomeT -= CFG.buildings.refinery.incomeEvery;
+        let amt = CFG.buildings.refinery.income;
+        if (low) amt *= CFG.lowPowerMul;
+        if (state.dailyIncomeMul && state.dailyIncomeMul !== 1) amt *= state.dailyIncomeMul; // 每日修饰「双倍精炼」（仅每日模式置 2）
+        if (boostActive(state, 'P')) amt *= CFG.boostIncomeMul * (state.boostMul || 1); // 每日修饰「增益站×1.5」叠加 boostMul
+        amt = Math.round(amt);
+        eco.earn(amt, 'refinery');
+        state.fxTexts.push({ x: b.x, y: b.y - 0.6, text: '+' + amt, t: 0, max: 1.1 }); // 入账跳字（与账本同一事件，金额同源）
+      }
+    }
+    if (b.queue.length) {
+      const type = b.queue[0], c = CFG.units[type];
+      b.progress += dt * (low ? CFG.lowPowerMul : 1);
+      if (b.progress >= c.buildTime) {
+        b.progress = 0; b.queue.shift();
+        if (popOf(state, b.side) < CFG.popCap) {
+          const u = mkUnit(state, type, b.side, b.x + (Math.random() - 0.5), b.y + (b.side === 'P' ? b.size / 2 + 0.6 : -b.size / 2 - 0.6));
+          if (b.side === 'P') setOrder(state, u, { type: 'move', x: state.rally.x, y: state.rally.y });
+          else state.enemyPending.push(u.id);
+        }
+      }
+    } else b.progress = 0;
+  }
+}
+
+// ============ module: harvesters（采矿车循环：纯表演实体，不占单位/不参战/不寻路；收入仍由精炼厂计时入账，冻结口径不变） ============
+// 状态机：toOre（驶向最近矿点）→ harvest（采掘停留）→ toBase（满载返回）→ unload（卸货停留）→ toOre…
+const HARV = { speed: 2.6, harvestTime: 2.5, unloadTime: 1.1 };
+function nearestOre(x, y) { let best = ORE[0], bd = 1e9; for (const o of ORE) { const d = Math.hypot(o.x - x, o.y - y); if (d < bd) { bd = d; best = o; } } return best; }
+function updateHarvesters(state, dt) {
+  const refs = state.buildings.filter(b => b.type === 'refinery' && b.hp > 0 && !b.building);
+  state.harvesters = state.harvesters.filter(h => refs.some(b => b.id === h.refId));
+  for (const b of refs) {
+    if (!state.harvesters.some(h => h.refId === b.id)) {
+      const ore = nearestOre(b.x, b.y);
+      state.harvesters.push({ refId: b.id, side: b.side, x: b.x, y: b.y + b.size / 2 + 0.5, phase: 'toOre', t: 0, oreX: ore.x, oreY: ore.y, loaded: false });
+    }
+  }
+  for (const h of state.harvesters) {
+    const b = state.buildings.find(x => x.id === h.refId); if (!b) continue;
+    const bx = b.x, by = b.y + b.size / 2 + 0.5;
+    if (h.phase === 'toOre' || h.phase === 'toBase') {
+      const tx = h.phase === 'toOre' ? h.oreX : bx, ty = h.phase === 'toOre' ? h.oreY : by;
+      const d = Math.hypot(tx - h.x, ty - h.y), step = HARV.speed * dt;
+      if (d <= Math.max(0.12, step)) { h.x = tx; h.y = ty; h.phase = h.phase === 'toOre' ? 'harvest' : 'unload'; h.t = 0; }
+      else { h.x += (tx - h.x) / d * step; h.y += (ty - h.y) / d * step; }
+    } else if (h.phase === 'harvest') { h.t += dt; if (h.t >= HARV.harvestTime) { h.phase = 'toBase'; h.t = 0; h.loaded = true; } }
+    else if (h.phase === 'unload') { h.t += dt; if (h.t >= HARV.unloadTime) { h.phase = 'toOre'; h.t = 0; h.loaded = false; const ore = nearestOre(b.x, b.y); h.oreX = ore.x; h.oreY = ore.y; } }
+  }
+}
+
+// ============ module: units（指令/索敌/战斗/移动；伤害公式只在此处与纯逻辑段） ============
+function setOrder(state, u, order) { u.order = order; u.combatTarget = null; u.path = []; u.pathT = 0; }
+function findById(state, id) { return state.units.find(u => u.id === id) || state.buildings.find(b => b.id === id); }
+function targetOf(state, t) { // 统一目标描述（伤害函数入参）
+  if (!t) return null;
+  return t.kind === 'building' ? { kind: 'building' } : { kind: 'unit', cls: t.cls, type: t.type };
+}
+function distTo(u, t) { const r = t.kind === 'building' ? Math.max(t.size / 2, 0.8) : 0.32; return Math.max(0, Math.hypot(t.x - u.x, t.y - u.y) - r); }
+function acquire(state, u) {
+  // 优先级：集火目标 > 攻击自己的敌人 > 射程内最近敌人 > 建筑
+  const foes = state.units.filter(e => e.side !== u.side && e.hp > 0);
+  if (u.order.type === 'focus') { const t = findById(state, u.order.targetId); if (t && t.hp > 0) return t; u.order = { type: 'attackmove', x: u.x, y: u.y }; }
+  const atk = foes.find(e => e.id === u.lastAttackerId);
+  if (atk && Math.hypot(atk.x - u.x, atk.y - u.y) <= CFG.sight + 1.5) return atk;
+  const engage = u.order.type === 'attackmove' || u.order.type === 'idle' || u.order.type === 'focus';
+  let best = null, bd = engage ? CFG.sight : CFG.units[u.type].range + 0.4;
+  for (const e of foes) { const d = Math.hypot(e.x - u.x, e.y - u.y); if (d < bd) { bd = d; best = e; } }
+  if (best) return best;
+  if (engage) { // 建筑兜底：射程内或攻击前进时最近建筑
+    let bb = null, bbd = u.order.type === 'attackmove' ? CFG.sight + 2 : CFG.units[u.type].range + 0.4;
+    for (const b of state.buildings) { if (b.side === u.side || b.hp <= 0 || b.building) continue; const d = distTo(u, b); if (d < bbd) { bbd = d; bb = b; } }
+    if (bb) return bb;
+  }
+  // 纯移动时：射程内建筑也可打
+  if (u.order.type === 'move') { for (const b of state.buildings) { if (b.side !== u.side && b.hp > 0 && distTo(u, b) <= CFG.units[u.type].range + 0.4) return b; } }
+  return null;
+}
+function ensurePath(state, u, tx, ty) {
+  u.pathT -= 1;
+  if (!u.path.length || u.pathT <= 0) {
+    u.path = findPath(state, Math.floor(u.x), Math.floor(u.y), Math.floor(tx), Math.floor(ty));
+    u.pathT = 40; // 帧，约 0.66s 重算一次
+  }
+}
+function moveAlong(state, u, tx, ty, dt) {
+  ensurePath(state, u, tx, ty);
+  let dest = u.path.length ? u.path[0] : { x: tx, y: ty };
+  if (u.path.length && Math.hypot(dest.x - u.x, dest.y - u.y) < 0.25) { u.path.shift(); dest = u.path[0] || { x: tx, y: ty }; }
+  const d = Math.hypot(dest.x - u.x, dest.y - u.y); if (d < 0.08) return true;
+  const road = ROAD.has(key(Math.floor(u.x), Math.floor(u.y)));
+  const sp = CFG.units[u.type].speed * (road ? CFG.roadSpeedMul : 1) * dt;
+  u.x += (dest.x - u.x) / d * Math.min(sp, d); u.y += (dest.y - u.y) / d * Math.min(sp, d);
+  return d <= 0.3 && !u.path.length;
+}
+function updateUnits(state, dt) {
+  const frame = Math.round(state.time / dt);
+  for (const u of state.units) {
+    if (u.hp <= 0) continue;
+    u.pathT = Math.max(0, u.pathT - 1);
+    u.acquireT -= dt;
+    if (u.acquireT <= 0) { u.acquireT = CFG.acquireTick; u.combatTarget = acquire(state, u); }
+    const t = u.combatTarget && u.combatTarget.hp > 0 ? u.combatTarget : null;
+    const rng = CFG.units[u.type].range;
+    if (t && distTo(u, t) <= rng + 0.35) {
+      // 开火
+      const tt = targetOf(state, t);
+      t.hp -= CFG.units[u.type].dps * damageMultiplier(u.type, tt) * dt;
+      t.lastAttackerId = u.id;
+      if (t.kind === 'building' && t.side === 'P') { t.hurtT = state.time; state.warnT = state.time; }
+      if (state.firstShotT === null) state.firstShotT = state.time;
+      u.tracerT -= dt; if (u.tracerT <= 0) { u.tracerT = 0.25; state.fx.push({ x1: u.x, y1: u.y, x2: t.x, y2: t.y, t: 0.08, side: u.side }); }
+      continue;
+    }
+    if (t && (u.order.type === 'focus' || u.order.type === 'attackmove' || u.order.type === 'idle')) { moveAlong(state, u, t.x, t.y, dt); continue; }
+    if (u.order.type === 'move' || u.order.type === 'attackmove') {
+      const arrived = moveAlong(state, u, u.order.x, u.order.y, dt);
+      if (arrived) u.order = { type: 'idle' };
+    }
+  }
+  // 单位间简单避让：重叠时互相推开
+  const us = state.units.filter(u => u.hp > 0);
+  for (let i = 0; i < us.length; i++) for (let j = i + 1; j < us.length; j++) {
+    const a = us[i], b = us[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+    if (d > 0.001 && d < 0.55) { const push = (0.55 - d) / 2, ux = dx / d, uy = dy / d; a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push; }
+    else if (d <= 0.001) { b.x += 0.1; }
+  }
+  // 死亡清理与击毁/损失计数（killCost 供无尽计分：击毁造价累计；losses 供四行战报）；死亡点生成爆炸粒子（M4 美术润色，渲染层只读 fxBooms）
+  for (const u of state.units) if (u.hp <= 0 && !u.counted) { u.counted = true; state.fxBooms.push({ x: u.x, y: u.y, t: 0, max: 0.45, side: u.side, big: false }); if (u.side === 'E') { state.kills++; state.killCost += CFG.units[u.type].cost; } else state.losses++; }
+  for (const b of state.buildings) if (b.hp <= 0 && !b.counted) { b.counted = true; state.fxBooms.push({ x: b.x, y: b.y, t: 0, max: 0.8, side: b.side, big: true }); if (b.side === 'E') { state.kills++; state.killCost += CFG.buildings[b.type].cost; state.ecoP.earn(CFG.loot, 'loot'); } else state.losses++; }
+  state.units = state.units.filter(u => u.hp > 0);
+  state.selection = state.selection.filter(id => state.units.some(u => u.id === id));
+}
+// 机枪塔开火（建筑战斗）
+function updateTowers(state, dt) {
+  for (const b of state.buildings) {
+    if (b.type !== 'tower' || b.hp <= 0 || b.building) continue;
+    let best = null, bd = CFG.buildings.tower.range + 0.5;
+    for (const e of state.units) { if (e.side === b.side || e.hp <= 0) continue; const d = Math.hypot(e.x - b.x, e.y - b.y); if (d < bd) { bd = d; best = e; } }
+    if (best) { best.hp -= CFG.buildings.tower.dps * (b.dpsMul || 1) * dt; best.lastAttackerId = b.id; if (state.firstShotT === null) state.firstShotT = state.time; state.fx.push({ x1: b.x, y1: b.y, x2: best.x, y2: best.y, t: 0.05, side: b.side }); }
+  }
+}
+
+// ============ module: enemyAI（脚本波次+持续出兵；对玩家隐藏队列） ============
+function spawnAnchor(state, type) { // 装甲优先从存活战车厂出生，其余存活兵营（M4 修复：原实现兵营未判存活，毁后仍作出生锚点）
+  if (CFG.units[type].cls === 'armor') { const f = state.buildings.find(b => b.side === 'E' && b.type === 'factory' && b.hp > 0); if (f) return f; }
+  return state.buildings.find(b => b.side === 'E' && b.type === 'barracks' && b.hp > 0);
+}
+function spawnWave(state, comp) {
+  const made = [];
+  for (const [type, n] of Object.entries(comp)) for (let i = 0; i < n; i++) {
+    if (popOf(state, 'E') >= CFG.popCap) break;
+    const fac = spawnAnchor(state, type);
+    if (!fac) {
+      // M4 修复（原 M3-REG-02）：无尽模式敌工厂全毁后不再凭空/断供——改从北侧两条纵路路口入场（左右交替）；战役模式维持「拆厂停产该线」冻结口径
+      if (state.mode !== 'endless') break;
+      const mouthX = (state.endlessSpawnAlt++ % 2 === 0) ? (ROAD_COLS[0] + ROAD_COLS[1]) / 2 + 0.5 : (ROAD_COLS[2] + ROAD_COLS[3]) / 2 + 0.5;
+      made.push(mkUnit(state, type, 'E', mouthX + (Math.random() - 0.5), 1.2 + Math.random() * 0.5));
+      continue;
+    }
+    const u = mkUnit(state, type, 'E', fac.x + (Math.random() - 0.5) * 2, fac.y + 2 + (Math.random() - 0.5));
+    made.push(u);
+  }
+  const hq = hqOf(state, 'P'); if (!hq) return;
+  const stn = state.stations[0];
+  const tx = state.waveRoute === 'station' && stn ? stn.cx : hq.x, ty = state.waveRoute === 'station' && stn ? stn.cy : hq.y - 2;
+  made.forEach(u => setOrder(state, u, { type: 'attackmove', x: tx, y: ty }));
+}
+function updateEnemyAI(state, dt) {
+  // 前哨：15s 后向第一增益站推进制造首战
+  if (state.time >= 15 && !state.outpostMoved) { state.outpostMoved = true; const stn = state.stations[0]; if (stn) for (const id of state.outpost) { const u = state.units.find(x => x.id === id); if (u) setOrder(state, u, { type: 'attackmove', x: stn.cx, y: stn.cy }); } }
+  // 波次
+  while (state.waveIdx < state.waves.length && state.time >= state.waves[state.waveIdx].t) { spawnWave(state, state.waves[state.waveIdx].comp); state.waveIdx++; }
+  // 持续出兵：兵营在则周期产 1，攒够 4 个则压上（起始/间隔取关卡参数，语义与 M1 一致）
+  if (state.time >= state.prodStart) {
+    state.enemyProdT -= dt;
+    if (state.enemyProdT <= 0) {
+      state.enemyProdT = state.prodEvery;
+      const facAlive = state.buildings.some(b => b.side === 'E' && b.type === 'barracks' && b.hp > 0);
+      if (facAlive && popOf(state, 'E') < CFG.popCap) {
+        const type = state.prodCycle[state.enemyProdIdx++ % state.prodCycle.length];
+        const fac = state.buildings.find(b => b.side === 'E' && b.type === 'barracks' && b.hp > 0);
+        const u = mkUnit(state, type, 'E', fac.x + (Math.random() - 0.5), fac.y + 1.8);
+        state.enemyPending.push(u.id);
+      }
+    }
+  }
+  const pend = state.enemyPending.map(id => state.units.find(u => u.id === id)).filter(Boolean);
+  if (pend.length >= 4) { const hq = hqOf(state, 'P'); pend.forEach(u => setOrder(state, u, { type: 'attackmove', x: hq.x, y: hq.y - 2 })); state.enemyPending = []; }
+}
+
+// ============ module: endless（无尽状态机：预算递增买编成、计分、纪念星） ============
+function updateEndless(state, dt) {
+  const E = state.endless, C = CFG.endless;
+  E.score = endlessScore(E.wave, state.killCost, state.time);
+  E.stars = Math.floor(E.wave / C.starEvery);
+  const eAlive = state.units.some(u => u.side === 'E' && u.hp > 0);
+  if (!eAlive) {
+    E.nextT -= dt;
+    if (E.nextT <= 0) {
+      E.wave++;
+      spawnWave(state, endlessWaveComp(E.wave, E.budget));
+      E.budget = endlessBudgetFor(E.wave + 1);
+      E.nextT = C.waveGap;
+    }
+  }
+}
+
+// ============ 增益站 ============
+function updateBoost(state, dt) {
+  for (const stn of state.stations) {
+    const p = stationGarrison(state, stn, 'P'), e = stationGarrison(state, stn, 'E');
+    if (p > 0 && e === 0 && stn.owner !== 'P') { stn.prog += dt / CFG.boostCaptureTime; if (stn.prog >= 1) { stn.owner = 'P'; stn.prog = 1; } }
+    else if (e > 0 && p === 0 && stn.owner !== 'E') { stn.prog -= dt / CFG.boostCaptureTime; if (stn.prog <= -1) { stn.owner = 'E'; stn.prog = -1; } }
+  }
+}
+
+// ============ module: superweapon（超级武器「全线轰炸」；充能只走 tick、释放只走 callStrike、伤害只走 strikeDamage 单点） ============
+// 伤害口径：单位吃 unitDmg 经伤害函数（攻击类型 'bomb' 为中立类型，不在克制矩阵内 → 全系数 ×1）；
+// 建筑单次承伤钳制 min(unitDmg, 该建筑最大 HP × bldDmgFrac)——满血 HQ 一发只掉 25%，打不爆；死亡计数由 updateUnits 统一清理承接。
+function swTick(state, dt) {
+  if (!state.sw.ready) { state.sw.charge = Math.min(CFG.superweapon.chargeTime, state.sw.charge + dt); if (state.sw.charge >= CFG.superweapon.chargeTime) state.sw.ready = true; }
+}
+// 玩家释放：点超武按钮进入瞄准后点地图调用；未就绪返回 false。就绪在点火瞬间消耗，预警 warnTime 后落弹。
+function callStrike(state, x, y) {
+  if (!state.sw.ready || state.over) return false;
+  state.sw.charge = 0; state.sw.ready = false;
+  state.swPending.push({ x, y, side: 'P', t: CFG.superweapon.warnTime });
+  return true;
+}
+// 落弹结算（唯一伤害入口）：半径内敌方单位/建筑承伤；返回实际命中数
+function strikeDamage(state, x, y, side) {
+  const C = CFG.superweapon, foe = side === 'P' ? 'E' : 'P';
+  let hits = 0;
+  for (const u of state.units) {
+    if (u.side !== foe || u.hp <= 0) continue;
+    if (Math.hypot(u.x - x, u.y - y) <= C.radius) { u.hp -= C.unitDmg * damageMultiplier('bomb', targetOf(state, u)); u.lastAttackerId = 0; hits++; }
+  }
+  for (const b of state.buildings) {
+    if (b.side !== foe || b.hp <= 0) continue;
+    const d = Math.max(0, Math.hypot(b.x - x, b.y - y) - b.size / 2);
+    if (d <= C.radius) { b.hp -= Math.min(C.unitDmg, b.maxHp * C.bldDmgFrac); if (b.side === 'P') { b.hurtT = state.time; state.warnT = state.time; } hits++; }
+  }
+  state.fxBooms.push({ x, y, t: 0, max: 0.7, side, big: true });
+  if (state.firstShotT === null) state.firstShotT = state.time;
+  return hits;
+}
+// 玩家聚集区（敌方超武瞄准点）：存活玩家单位质心；无单位时退回玩家 HQ
+function playerClusterCenter(state) {
+  const us = state.units.filter(u => u.side === 'P' && u.hp > 0);
+  if (!us.length) { const hq = hqOf(state, 'P'); return hq ? { x: hq.x, y: hq.y } : null; }
+  return { x: us.reduce((n, u) => n + u.x, 0) / us.length, y: us.reduce((n, u) => n + u.y, 0) / us.length };
+}
+function updateSuperweapon(state, dt) {
+  swTick(state, dt);
+  // 敌方超武：仅第 8 关（levelIdx 7，含每日抽到 L8），t≥enemyStart 起每 enemyEvery 秒对玩家聚集区放一发（红色预警、可躲）
+  if (state.mode !== 'endless' && state.levelIdx === 7 && state.time >= state.swEnemyNext) {
+    const c = playerClusterCenter(state);
+    if (c) state.swPending.push({ x: c.x, y: c.y, side: 'E', t: CFG.superweapon.warnTime });
+    state.swEnemyNext += CFG.superweapon.enemyEvery;
+  }
+  for (const p of state.swPending) p.t -= dt;
+  const due = state.swPending.filter(p => p.t <= 0);
+  state.swPending = state.swPending.filter(p => p.t > 0);
+  for (const p of due) strikeDamage(state, p.x, p.y, p.side);
+}
+
+// ============ module: daily（每日挑战：本地日期种子选关＋修饰符；完成状态只走 save 层） ============
+function dailyDateStr(d) { // 本地日期 YYYYMMDD
+  const p2 = n => String(n).padStart(2, '0');
+  return '' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate());
+}
+function dailySeedFrom(dateStr) { // FNV-1a 字符串哈希（确定性：同日期同结果，跨日稳定可复现）
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < dateStr.length; i++) { h ^= dateStr.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+// 今日挑战定义：种子选关（0-7）＋修饰符（五选一）；同一 dateStr 任意次调用结果一致
+function dailyForDate(dateStr) {
+  const seed = dailySeedFrom(dateStr);
+  const levelIdx = seed % 8;
+  const mod = CFG.daily.mods[Math.floor(seed / 8) % CFG.daily.mods.length];
+  return { date: dateStr, levelIdx, modKey: mod.key, modName: mod.name };
+}
+// 修饰符落地（在 applyLevel 之后调用；全部只动 state 层，不回写 CFG.levels 冻结配置）
+function applyDailyMods(state, def) {
+  state.daily = def;
+  if (def.modKey === 'tower') { // 敌塔强化：敌塔耐久与火力 ×1.5
+    for (const b of state.buildings) if (b.side === 'E' && b.type === 'tower') { b.hp = b.maxHp = Math.round(b.maxHp * 1.5); b.dpsMul = 1.5; }
+  } else if (def.modKey === 'funds') { // 起始资金+300（走 economy 账本，守恒不破）
+    state.ecoP.earn(300, 'daily_funds');
+  } else if (def.modKey === 'refinery') { // 双倍精炼：玩家精炼收入 ×2
+    state.dailyIncomeMul = 2;
+  } else if (def.modKey === 'waves') { // 敌波次加密：波次提前 10%、持续出兵间隔 ×0.75
+    state.waves.forEach(w => { w.t = Math.round(w.t * 0.9); });
+    state.prodEvery = Math.max(10, Math.round(state.prodEvery * 0.75));
+  } else if (def.modKey === 'station') { // 增益站×1.5：增益收入系数再 ×1.5
+    state.boostMul = 1.5;
+  }
+  return state;
+}
+function initDailyState(dateStr) {
+  const def = dailyForDate(dateStr || dailyDateStr(new Date()));
+  const st = skeletonState('daily');
+  applyLevel(st, def.levelIdx);
+  return applyDailyMods(st, def);
+}
+// 每日完成发奖（结算时调用；纯 save 层口径）：今日挑战获胜且今日未领 → 记 done、纪念星总账 +1，返回是否发奖
+function awardDailyIfWon(saveData, state, won) {
+  if (!won || !state.daily) return false;
+  const d = normalizeSave(saveData);
+  if (d.daily.date === state.daily.date && d.daily.done) return false;
+  d.daily = { date: state.daily.date, done: true };
+  d.totalStars += 1;
+  saveData.daily = d.daily; saveData.totalStars = d.totalStars;
+  return true;
+}
+// L1 分步教学当前步（纯函数）：build→squad→focus 依次触发，全完成返回 null
+function tutStep(tutorial) {
+  const t = tutorial || {};
+  if (!t.build) return 'build';
+  if (!t.squad) return 'squad';
+  if (!t.focus) return 'focus';
+  return null;
+}
+
+// ============ 主循环更新 ============
+function updateGame(state, dt) {
+  if (state.over || state.reviveOffer) return; // 续命抉择中全场暂停（等待玩家点广告/放弃，见 platform revive 流）
+  state.time += dt;
+  updateBuildings(state, dt);
+  updateHarvesters(state, dt);
+  if (state.mode === 'endless') updateEndless(state, dt); else updateEnemyAI(state, dt);
+  updateUnits(state, dt);
+  updateTowers(state, dt);
+  updateBoost(state, dt);
+  updateSuperweapon(state, dt);
+  state.fx = state.fx.filter(f => (f.t -= dt) > 0);
+  state.fxTexts = state.fxTexts.filter(f => (f.t += dt) < f.max);
+  state.fxRings = state.fxRings.filter(f => (f.t += dt) < f.max);
+  state.fxBooms = state.fxBooms.filter(f => (f.t += dt) < f.max);
+  let w = null;
+  if (state.mode === 'endless') {
+    const p = hqOf(state, 'P');
+    if (p && p.hp <= 0) {
+      // 无尽续命（每局 1 次，广告点位）：未用过则先挂起抉择而非直接判负；已用过才判负
+      if (!state.reviveUsed) { state.reviveOffer = true; p.hp = 0; }
+      else w = 'lose';
+    }
+    if (w) state.endless.score = endlessScore(state.endless.wave, state.killCost, state.time);
+  }
+  else w = checkWinner(state);
+  if (w) { state.over = true; state.result = w; }
+}
+// 无尽续命生效（platform 广告发奖或已存续命消费时调用）：HQ 回复至上限的 reviveHpFrac
+function applyRevive(state) {
+  const p = hqOf(state, 'P'); if (!p) return false;
+  p.hp = Math.round(p.maxHp * CFG.ad.reviveHpFrac);
+  p.counted = false;
+  state.reviveUsed = true; state.reviveOffer = false;
+  return true;
+}
+
+// ============ module: platform（纯逻辑部分：分数钳制/云存档合并/广告待核队列核；浏览器接线在 ui 分段末尾） ============
+// 无尽上报分数钳制：与计分封顶一致（服务端另有 CAPS，此为客户端先行钳制）
+function clampSubmitScore(score) { const n = Math.floor(Number(score)); return Number.isFinite(n) ? Math.max(0, Math.min(CFG.endless.scoreCap, n)) : 0; }
+// 云存档合并取高：云端记录与本地逐项取高（解锁/星数/无尽最佳/纪念星），云端非法返回 null（不覆盖本地）
+function mergeSaveHigh(local, cloudRaw) {
+  if (cloudRaw == null) return null;
+  let cloud = cloudRaw;
+  if (typeof cloudRaw === 'string') { try { cloud = JSON.parse(cloudRaw); } catch (e) { return null; } }
+  if (!cloud || typeof cloud !== 'object' || Array.isArray(cloud)) return null;
+  const c = normalizeSave(cloud), l = normalizeSave(local), out = defaultSave();
+  out.unlocked = Math.max(l.unlocked, c.unlocked);
+  for (let i = 0; i < 8; i++) out.stars[i] = Math.max(l.stars[i], c.stars[i]);
+  out.endlessBest = Math.max(l.endlessBest, c.endlessBest);
+  out.endlessStars = Math.max(l.endlessStars, c.endlessStars);
+  out.totalStars = Math.max(l.totalStars, c.totalStars);
+  out.daily = c.daily.date > l.daily.date ? c.daily : (l.daily.date > c.daily.date ? l.daily : { date: l.daily.date, done: l.daily.done || c.daily.done }); // 每日状态取较新日期，同日完成取或
+  out.tutorial = { build: l.tutorial.build || c.tutorial.build, squad: l.tutorial.squad || c.tutorial.squad, focus: l.tutorial.focus || c.tutorial.focus };
+  return out;
+}
+// ---- 广告 PENDING 待核队列（拼将三作 v5.22 同口径；本段为纯函数，storage 由接线层注入） ----
+// 队列＝主槽单条＋后台槽数组（上限 CFG.ad.queueCap，FIFO）；floor＝已消费增量水位，随主槽条目落盘。
+// 唯一落定信号＝平台服务端次数余额增量：count > max(该条 base, floor) 才落定并消费 1 个增量（floor 抬至 max(base,floor)+1）；
+// 绝不凭任务 status==='completed' 发奖或删标记；查询失败（count===null）一律保留续核；
+// 超 TTL（12h）先核对后清理：仅查询成功且无增量才过期清理，查询失败保留。
+const AD_MAIN_KEY = 'quanxian_pending_ad', AD_BG_KEY = 'quanxian_pending_ad_bg', AD_INBOX_KEY = 'quanxian_ad_inbox';
+function readAdQueue(storage) {
+  let items = [], floor = 0;
+  if (!storage) return { items, floor };
+  try {
+    const raw = storage.getItem(AD_MAIN_KEY);
+    if (raw) { const j = JSON.parse(raw); if (j && j.type) { items.push(j); floor = j.floor || 0; } }
+  } catch (e) {}
+  try {
+    const raw2 = storage.getItem(AD_BG_KEY);
+    if (raw2) { const a = JSON.parse(raw2); if (Array.isArray(a)) items = items.concat(a.filter(x => x && x.type)); }
+  } catch (e) {}
+  return { items, floor };
+}
+function writeAdQueue(storage, items, floor) {
+  if (!storage) return;
+  try {
+    if (!items.length) { storage.removeItem(AD_MAIN_KEY); storage.removeItem(AD_BG_KEY); return; }
+    storage.setItem(AD_MAIN_KEY, JSON.stringify(Object.assign({}, items[0], { floor: floor || 0 })));
+    if (items.length > 1) storage.setItem(AD_BG_KEY, JSON.stringify(items.slice(1))); else storage.removeItem(AD_BG_KEY);
+  } catch (e) {}
+}
+function makeAdEntry(type, base, now, token, snap) { return { type, ts: now, base: (typeof base === 'number' ? base : null), token, snap: snap || null, checks: 0 }; }
+// 核对一轮：count 为当前服务端次数余额（查询失败传 null）。返回落定/过期/保留三组与新 floor；保留条目 checks+1。
+function settleAdQueue(items, floor, count, now) {
+  const granted = [], expired = [], remaining = [];
+  let fl = floor || 0;
+  const ok = typeof count === 'number';
+  for (const p of items) {
+    if (ok && typeof p.base === 'number' && count > Math.max(p.base, fl)) { granted.push(p); fl = Math.max(p.base, fl) + 1; continue; }
+    if (now - (p.ts || 0) >= CFG.ad.ttlMs && ok) { expired.push(p); continue; }
+    p.checks = (p.checks || 0) + 1; p.lastCheck = now;
+    remaining.push(p);
+  }
+  return { granted, expired, remaining, floor: fl };
+}
+// 未落定拦截闸（带时限，防 v5 死锁）：任一保留条目年龄 ≤gateMs 且 checks ≤gateChecks 才拦截新广告；超时/核对超次必放行（旧条转后台续核）
+function adGateBlocked(remaining, now) { return remaining.some(p => now - (p.ts || 0) <= CFG.ad.gateMs && (p.checks || 0) <= CFG.ad.gateChecks); }
+// 四行战报（原版式结算口径）：用时/击毁/损失/剩余资金
+function battleReport(state) { return { time: state.time, kills: state.kills, losses: state.losses, funds: Math.floor(state.ecoP.funds) }; }
+
+// ============ module: ui（浏览器渲染/输入/HUD；其中的 art 渲染层只读 state） ============
+if (typeof document !== 'undefined') {
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  const mm = document.getElementById('minimap'), mmx = mm.getContext('2d');
+  const CELL = CFG.cell, WORLD_H = CFG.rows * CELL, MAXCAM = WORLD_H - CFG.viewH;
+  let SAVE = loadSave();
+  let placementType = null, rallyMode = false, swTargeting = false, hover = null, lastTap = { t: 0, x: 0, y: 0 }, drag = null, introDone = false, overShown = false, hudT = 0, fpsEMA = 60, fpsT = 0;
+  let terrainCv = null;
+  const $ = id => document.getElementById(id);
+  const clampCam = v => Math.max(0, Math.min(MAXCAM, v));
+  function toCanvas(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height }; }
+  function toWorld(p) { return { x: p.x / CELL, y: (p.y + S.camY) / CELL }; }
+  const FCOL = side => side === 'P' ? '#2f6fd0' : '#c23b2a';       // 阵营主色：远征军蓝 / 赤铁红
+  const FCOL_L = side => side === 'P' ? '#7db4f0' : '#ff8a70';
+
+  // ---- art：地形离屏（每关构建一次：草地/道路/矿点/岩体，静态层零逐帧成本） ----
+  function buildTerrain() {
+    terrainCv = document.createElement('canvas'); terrainCv.width = CFG.cols * CELL; terrainCv.height = WORLD_H;
+    const g = terrainCv.getContext('2d'), rnd = mulberry32(20261105);
+    g.fillStyle = '#71824c'; g.fillRect(0, 0, terrainCv.width, WORLD_H);
+    for (let x = 0; x < CFG.cols; x++) for (let y = 0; y < CFG.rows; y++) {
+      if ((x + y) % 2 === 0) { g.fillStyle = 'rgba(255,255,255,0.045)'; g.fillRect(x * CELL, y * CELL, CELL, CELL); }
+      if (rnd() < 0.5) { g.fillStyle = rnd() < 0.5 ? 'rgba(70,90,40,0.20)' : 'rgba(140,150,90,0.16)'; const w = 6 + rnd() * 16; g.beginPath(); g.ellipse(x * CELL + rnd() * CELL, y * CELL + rnd() * CELL, w, w * 0.6, rnd() * 3, 0, Math.PI * 2); g.fill(); }
+      for (let i = 0; i < 3; i++) { g.fillStyle = 'rgba(50,60,30,0.25)'; g.fillRect(x * CELL + rnd() * CELL, y * CELL + rnd() * CELL, 2, 3); }
+    }
+    // 道路：双纵路（土路压实色＋边缘线＋中线虚线；列位与 ROAD_COLS 同源）
+    for (const x of [ROAD_COLS[0], ROAD_COLS[2]]) {
+      g.fillStyle = '#6b6252'; g.fillRect(x * CELL, 0, CELL * 2, WORLD_H);
+      g.fillStyle = '#7d7260'; g.fillRect(x * CELL + 3, 0, CELL * 2 - 6, WORLD_H);
+      g.strokeStyle = 'rgba(40,36,28,0.55)'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(x * CELL + 2, 0); g.lineTo(x * CELL + 2, WORLD_H); g.moveTo((x + 2) * CELL - 2, 0); g.lineTo((x + 2) * CELL - 2, WORLD_H); g.stroke();
+      g.strokeStyle = 'rgba(230,220,180,0.5)'; g.lineWidth = 2; g.setLineDash([14, 12]);
+      g.beginPath(); g.moveTo((x + 1) * CELL, 0); g.lineTo((x + 1) * CELL, WORLD_H); g.stroke(); g.setLineDash([]);
+      for (let i = 0; i < 26; i++) { g.fillStyle = 'rgba(52,46,36,0.35)'; g.beginPath(); g.ellipse((x + rnd() * 2) * CELL, rnd() * WORLD_H, 3 + rnd() * 5, 2 + rnd() * 3, 0, 0, Math.PI * 2); g.fill(); }
+    }
+    // 金黄矿点：晶体簇（金体＋高光面＋投影）
+    for (const o of ORE) {
+      const cx = o.x * CELL, cy = o.y * CELL;
+      g.fillStyle = 'rgba(60,50,20,0.35)'; g.beginPath(); g.ellipse(cx, cy + 4, CELL * 1.15, CELL * 0.62, 0, 0, Math.PI * 2); g.fill();
+      const cr = mulberry32(Math.floor(o.x * 100 + o.y));
+      for (let i = 0; i < 15; i++) {
+        const a = cr() * Math.PI * 2, r = cr() * CELL * 0.95, px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r * 0.6, s = 3.5 + cr() * 5.5;
+        g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(px - s * 0.4, py + s * 0.5, s * 0.8, 2);
+        g.fillStyle = '#d99a17'; g.beginPath(); g.moveTo(px, py - s); g.lineTo(px + s * 0.62, py + s * 0.5); g.lineTo(px - s * 0.62, py + s * 0.5); g.closePath(); g.fill();
+        g.fillStyle = '#ffd94d'; g.beginPath(); g.moveTo(px, py - s); g.lineTo(px + s * 0.3, py + s * 0.1); g.lineTo(px - s * 0.34, py + s * 0.42); g.closePath(); g.fill();
+        g.fillStyle = '#fff3b0'; g.fillRect(px - 1, py - s * 0.72, 2, 2);
+      }
+    }
+    // 岩体障碍：块体＋顶面高光＋裂纹
+    for (const k of S.obstacles) {
+      const [x, y] = k.split(',').map(Number), px = x * CELL, py = y * CELL;
+      g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(px + 3, py + 5, CELL - 3, CELL - 3);
+      g.fillStyle = '#767a7e'; g.fillRect(px + 1, py + 1, CELL - 2, CELL - 2);
+      g.fillStyle = '#8f9397'; g.fillRect(px + 4, py + 3, CELL - 10, CELL - 12);
+      g.fillStyle = '#5b5e61'; g.fillRect(px + CELL - 9, py + CELL - 10, 6, 7);
+      g.strokeStyle = 'rgba(40,42,44,0.6)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(px + 7, py + 8); g.lineTo(px + 13, py + 15); g.lineTo(px + 11, py + 22); g.stroke();
+    }
+  }
+  // ---- art：建筑（结构细节矢量绘制；只读 b 与 S.time） ----
+  function drawBuilding(g, b) {
+    const c = CFG.buildings[b.type], px = b.gx * CELL, py = b.gy * CELL, sz = b.size * CELL, col = FCOL(b.side), colL = FCOL_L(b.side);
+    g.fillStyle = 'rgba(0,0,0,0.30)'; g.beginPath(); g.ellipse(px + sz / 2, py + sz - 2, sz * 0.52, 6, 0, 0, Math.PI * 2); g.fill(); // 投影
+    g.fillStyle = '#8f8c84'; g.fillRect(px + 1, py + 1, sz - 2, sz - 2); // 混凝土地台
+    g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 1; g.strokeRect(px + 4.5, py + 4.5, sz - 9, sz - 9);
+    const X = px + 4, Y = py + 4, W = sz - 8, H = sz - 14; // 主体区（底部让位血条）
+    g.fillStyle = '#565b61'; g.fillRect(X, Y, W, H);
+    g.fillStyle = col; g.fillRect(X, Y, W, 4); // 阵营色顶带
+    if (b.type === 'hq') {
+      g.fillStyle = '#4a5058'; g.fillRect(X + 4, Y + 8, W - 8, H - 12);
+      g.fillStyle = col; g.fillRect(X + W * 0.28, Y + 10, W * 0.44, H * 0.52);
+      g.fillStyle = '#394048'; g.beginPath(); g.arc(px + sz / 2, Y + 12, W * 0.20, Math.PI, 0); g.fill(); // 穹顶
+      g.strokeStyle = '#22262b'; g.lineWidth = 2; g.beginPath(); g.moveTo(px + sz / 2, Y + 10); g.lineTo(px + sz / 2, Y - 2); g.stroke();
+      const ra = S.time * 0.9 + b.id; // 雷达碟（旋转）
+      g.strokeStyle = '#d7dde3'; g.lineWidth = 2; g.beginPath(); g.arc(px + sz / 2 + Math.cos(ra) * 5, Y - 3, 5, ra - 2.2, ra + 0.6); g.stroke();
+      const sa2 = S.time * 1.8 + b.id; // M4 润色：雷达扫描臂旋转＋桅顶信标呼吸闪烁
+      g.strokeStyle = 'rgba(125,255,160,0.85)'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(px + sz / 2, Y - 2); g.lineTo(px + sz / 2 + Math.cos(sa2) * 13, Y - 2 + Math.sin(sa2) * 5); g.stroke();
+      g.fillStyle = Math.sin(S.time * 3.2 + b.id) > 0 ? '#ff5040' : '#7a1610'; g.beginPath(); g.arc(px + sz / 2, Y - 4, 1.8, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#ffd94d'; for (let i = 0; i < 3; i++) g.fillRect(X + 10 + i * 12, Y + H - 14, 6, 4); // 窗光
+      g.fillStyle = '#22262b'; g.fillRect(px + sz / 2 - 6, Y + H - 10, 12, 10); // 大门
+    } else if (b.type === 'power') {
+      for (const fx of [0.26, 0.66]) { // 双烟囱＋烟羽
+        const tx = X + W * fx;
+        g.fillStyle = '#3e444b'; g.fillRect(tx - 6, Y + 2, 12, H - 4);
+        g.fillStyle = '#c23b2a'; g.fillRect(tx - 6, Y + 2, 12, 4);
+        for (let i = 0; i < 3; i++) { const ph = (S.time * 0.35 + b.id * 0.4 + i / 3 + fx) % 1; g.fillStyle = 'rgba(225,228,230,' + (0.35 * (1 - ph)).toFixed(2) + ')'; g.beginPath(); g.arc(tx + ph * 7, Y - 2 - ph * 15, 3.5 + ph * 6, 0, Math.PI * 2); g.fill(); }
+      }
+      g.fillStyle = '#454b52'; g.fillRect(X + 3, Y + H - 13, W - 6, 9);
+      g.fillStyle = '#ffd94d'; g.font = 'bold 9px sans-serif'; g.textAlign = 'center'; g.fillText('⚡', px + sz / 2, Y + H - 5);
+    } else if (b.type === 'refinery') {
+      for (const fx of [0.24, 0.52]) { // 储罐（罐体＋罐顶＋高光）
+        const tx = X + W * fx;
+        g.fillStyle = '#9aa1a8'; g.fillRect(tx - 8, Y + 12, 16, H - 16);
+        g.fillStyle = '#c8ced4'; g.beginPath(); g.ellipse(tx, Y + 12, 8, 3.4, 0, Math.PI, 0); g.fill();
+        g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillRect(tx - 5, Y + 15, 3, H - 22);
+        g.fillStyle = col; g.fillRect(tx - 8, Y + 17, 16, 3);
+      }
+      g.strokeStyle = '#2e3339'; g.lineWidth = 3; g.beginPath(); g.moveTo(X + W - 9, Y + H - 4); g.lineTo(X + W - 9, Y + 6); g.lineTo(X + W * 0.45, Y + 6); g.stroke(); // 吊臂
+      g.strokeStyle = '#2e3339'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(X + W * 0.45, Y + 6); g.lineTo(X + W * 0.45, Y + 12); g.stroke();
+      // M4 润色：排气烟囱＋烟粒子（与电厂同款轻量烟羽，参数错开）
+      const chx = X + W * 0.78;
+      g.fillStyle = '#3e444b'; g.fillRect(chx - 3.4, Y + 4, 6.8, 12);
+      g.fillStyle = '#c23b2a'; g.fillRect(chx - 3.4, Y + 4, 6.8, 2.6);
+      for (let i = 0; i < 3; i++) { const ph = (S.time * 0.28 + b.id * 0.61 + i / 3) % 1; g.fillStyle = 'rgba(228,230,232,' + (0.30 * (1 - ph)).toFixed(2) + ')'; g.beginPath(); g.arc(chx + ph * 6, Y + 2 - ph * 13, 2.8 + ph * 5, 0, Math.PI * 2); g.fill(); }
+      g.strokeStyle = 'rgba(46,51,57,0.8)'; g.lineWidth = 2; g.beginPath(); g.moveTo(X + 6, Y + H - 3); g.lineTo(X + W * 0.52, Y + H - 3); g.stroke(); // 地面输料管线
+      // 采矿车已改为状态机实体（harvesters 分段统一绘制），此处不再画厂内小车
+    } else if (b.type === 'barracks') {
+      g.fillStyle = '#4a5058'; g.fillRect(X + 2, Y + 10, W - 4, H - 14);
+      g.fillStyle = '#394048'; g.beginPath(); g.moveTo(X, Y + 12); g.lineTo(px + sz / 2, Y + 2); g.lineTo(X + W, Y + 12); g.closePath(); g.fill(); // 屋顶
+      g.fillStyle = '#22262b'; g.fillRect(px + sz / 2 - 5, Y + H - 12, 10, 10); // 门
+      g.fillStyle = '#ffd94d'; g.fillRect(X + 7, Y + 17, 5, 4); g.fillRect(X + W - 12, Y + 17, 5, 4);
+      g.strokeStyle = '#22262b'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(X + W - 5, Y + 12); g.lineTo(X + W - 5, Y); g.stroke(); // 旗杆＋阵营旗
+      g.fillStyle = col; g.beginPath(); g.moveTo(X + W - 5, Y); g.lineTo(X + W - 5 + 9 + Math.sin(S.time * 3 + b.id) * 1.4, Y + 3); g.lineTo(X + W - 5, Y + 6); g.closePath(); g.fill();
+      g.fillStyle = '#a4906c'; for (let i = 0; i < 4; i++) { g.beginPath(); g.ellipse(X + 7 + i * (W - 14) / 3, Y + H - 2, 5, 2.6, 0, Math.PI, 0); g.fill(); } // 沙袋线
+    } else if (b.type === 'factory') {
+      g.fillStyle = '#454b52'; g.fillRect(X + 2, Y + 12, W - 4, H - 14);
+      g.fillStyle = '#394048'; g.beginPath(); g.arc(px + sz / 2, Y + 13, W / 2 - 2, Math.PI, 0); g.fill(); // 拱顶
+      g.fillStyle = '#24282d'; g.fillRect(X + W * 0.3, Y + 16, W * 0.4, H - 18); // 大门
+      g.strokeStyle = '#6d757d'; g.lineWidth = 1; for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(X + W * 0.3 + i * W * 0.1, Y + 16); g.lineTo(X + W * 0.3 + i * W * 0.1, Y + H - 2); g.stroke(); }
+      for (const fx of [0.14, 0.86]) { g.fillStyle = '#33383e'; g.fillRect(X + W * fx - 3, Y + 2, 6, 11); } // 双烟囱
+      for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? '#d8b91e' : '#26292d'; g.fillRect(X + 3 + i * (W - 6) / 6, Y + H - 5, (W - 6) / 6, 3); } // 警戒条
+    } else if (b.type === 'tower') {
+      g.strokeStyle = '#a4906c'; g.lineWidth = 3.4; g.beginPath(); g.arc(px + sz / 2, py + sz / 2, sz * 0.40, 0, Math.PI * 2); g.stroke(); // 沙袋圈
+      g.fillStyle = '#4a5058'; g.fillRect(px + sz / 2 - 6, py + sz / 2 - 6, 12, 12);
+      const ta = S.time * 0.6 + b.id * 1.7; // 枪塔缓旋巡逻
+      g.strokeStyle = '#22262b'; g.lineWidth = 2.6; g.beginPath(); g.moveTo(px + sz / 2, py + sz / 2); g.lineTo(px + sz / 2 + Math.cos(ta) * 11, py + sz / 2 + Math.sin(ta) * 11); g.stroke();
+      g.fillStyle = col; g.beginPath(); g.arc(px + sz / 2, py + sz / 2, 4.4, 0, Math.PI * 2); g.fill();
+    }
+    if (b.building) { // 施工中：压暗＋脚手架（立杆＋横杆＋斜撑）＋自下而上进度；完成瞬间由 fxRings 播展开环
+      g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(px + 2, py + 2, sz - 4, (sz - 4) * (1 - b.progress / c.buildTime));
+      g.strokeStyle = '#ffd94d'; g.lineWidth = 1.4; g.setLineDash([5, 4]); g.strokeRect(px + 3, py + 3, sz - 6, sz - 6); g.setLineDash([]);
+      g.strokeStyle = 'rgba(230,235,240,0.75)'; g.lineWidth = 1.2;
+      g.beginPath();
+      for (let i = 0; i <= 3; i++) { const lx = px + 5 + i * (sz - 10) / 3; g.moveTo(lx, py + sz - 4); g.lineTo(lx, py + 4); }
+      g.moveTo(px + 4, py + (sz - 8) / 2 + 4); g.lineTo(px + sz - 4, py + (sz - 8) / 2 + 4);
+      g.moveTo(px + 5, py + sz - 5); g.lineTo(px + 5 + (sz - 10) / 3, py + (sz - 8) / 2 + 5);
+      g.moveTo(px + sz - 5, py + (sz - 8) / 2 + 5); g.lineTo(px + sz - 5 - (sz - 10) / 3, py + sz - 5);
+      g.stroke();
+    } else if (b.hp < b.maxHp * 0.5) { // 受击分级：<50% 冒烟，<25% 起火（原版式损伤可视化，只读 hp）
+      const cxm = px + sz / 2, cym = py + sz * 0.3;
+      for (let i = 0; i < 3; i++) { const ph = (S.time * 0.3 + b.id * 0.53 + i / 3) % 1; g.fillStyle = 'rgba(60,60,60,' + (0.4 * (1 - ph)).toFixed(2) + ')'; g.beginPath(); g.arc(cxm + (i - 1) * 5 + ph * 4, cym - ph * 16, 3.5 + ph * 6.5, 0, Math.PI * 2); g.fill(); }
+      if (b.hp < b.maxHp * 0.25) {
+        const fl = Math.sin(S.time * 13 + b.id * 7) * 1.6;
+        g.fillStyle = '#e8641e'; g.beginPath(); g.moveTo(cxm - 6, cym + 7); g.lineTo(cxm + fl, cym - 6 - Math.abs(fl)); g.lineTo(cxm + 6, cym + 7); g.closePath(); g.fill();
+        g.fillStyle = '#ffc93a'; g.beginPath(); g.moveTo(cxm - 3.4, cym + 7); g.lineTo(cxm + fl * 0.6, cym - 2.4); g.lineTo(cxm + 3.4, cym + 7); g.closePath(); g.fill();
+      }
+    }
+    g.fillStyle = '#101216'; g.fillRect(px + 2, py + sz - 7, sz - 4, 4); // 血条
+    g.fillStyle = colL; g.fillRect(px + 2, py + sz - 7, (sz - 4) * Math.max(0, b.hp / b.maxHp), 4);
+    if (b.queue.length) { g.fillStyle = '#ffd94d'; g.font = 'bold 10px sans-serif'; g.textAlign = 'left'; g.fillText('队列' + b.queue.length, px + 3, py + 11); }
+    if (b.hp < b.maxHp && !b.building) { g.fillStyle = '#fff'; g.font = 'bold 9px sans-serif'; g.textAlign = 'center'; g.fillText(Math.ceil(b.hp), px + sz / 2, py + sz - 10); }
+  }
+  // ---- art：单位（炮塔朝向由目标/路径只读推导，渲染不写状态） ----
+  function faceAngle(u) {
+    const t = u.combatTarget && u.combatTarget.hp > 0 ? u.combatTarget : null;
+    if (t) return Math.atan2(t.y - u.y, t.x - u.x);
+    if (u.path && u.path.length) return Math.atan2(u.path[0].y - u.y, u.path[0].x - u.x);
+    if (u.order && (u.order.type === 'move' || u.order.type === 'attackmove')) return Math.atan2(u.order.y - u.y, u.order.x - u.x);
+    return u.side === 'P' ? -Math.PI / 2 : Math.PI / 2;
+  }
+  function drawUnit(g, u) {
+    const px = u.x * CELL, py = u.y * CELL, col = FCOL(u.side), colL = FCOL_L(u.side), fa = faceAngle(u);
+    g.fillStyle = 'rgba(0,0,0,0.30)'; g.beginPath(); g.ellipse(px, py + 7, u.cls === 'armor' ? 12 : 7.5, 3.4, 0, 0, Math.PI * 2); g.fill();
+    if (S.selection.includes(u.id)) { g.beginPath(); g.arc(px, py, u.cls === 'armor' ? 16 : 12.5, 0, Math.PI * 2); g.strokeStyle = '#ffe95c'; g.lineWidth = 2; g.stroke(); }
+    if (u.cls === 'armor') {
+      const big = u.type === 'htank';
+      g.save(); g.translate(px, py); g.rotate(fa);
+      const tw = big ? 13 : 11, tl = big ? 24 : 20; // 履带
+      g.fillStyle = '#24282d'; g.fillRect(-tl / 2, -tw, tl, 5.4); g.fillRect(-tl / 2, tw - 5.4, tl, 5.4);
+      g.strokeStyle = '#4c5257'; g.lineWidth = 1.2; for (let i = -tl / 2 + 3; i < tl / 2 - 1; i += 4.4) { g.beginPath(); g.moveTo(i, -tw + 0.8); g.lineTo(i, -tw + 4.6); g.moveTo(i, tw - 4.6); g.lineTo(i, tw - 0.8); g.stroke(); }
+      g.fillStyle = col; g.fillRect(-tl / 2 + 1.6, -tw + 4.6, tl - 3.2, tw * 2 - 9.2); // 车体
+      g.fillStyle = colL; g.fillRect(-tl / 2 + 3.4, -tw + 6, tl * 0.4, 3);
+      g.fillStyle = '#22262b'; g.fillRect(tl / 2 - 6, -2.6, 5.4, 5.2); // 车尾格栅
+      g.fillStyle = col; g.beginPath(); g.arc(0, 0, big ? 7.6 : 6.4, 0, Math.PI * 2); g.fill(); // 炮塔
+      g.fillStyle = '#22262b'; g.fillRect(big ? 5 : 4, -1.7, big ? 13 : 11, 3.4); // 炮管
+      g.fillStyle = colL; g.beginPath(); g.arc(-1.4, -1.4, 2.2, 0, Math.PI * 2); g.fill();
+      g.restore();
+    } else {
+      g.save(); g.translate(px, py);
+      g.fillStyle = '#2e3339'; g.fillRect(-4.6, 2.4, 3.4, 4.6); g.fillRect(1.2, 2.4, 3.4, 4.6); // 双腿
+      g.fillStyle = col; g.beginPath(); g.arc(0, 0, 6.8, 0, Math.PI * 2); g.fill(); // 躯干（制服色）
+      g.fillStyle = colL; g.fillRect(-4.4, -1.6, 8.8, 2.6); // 胸挂
+      g.fillStyle = '#3c4147'; g.beginPath(); g.arc(0, -1.2, 4.3, Math.PI, 0); g.fill(); // 头盔
+      g.rotate(fa);
+      if (u.type === 'rocket') { g.fillStyle = '#2b2f34'; g.fillRect(1.5, -6.4, 11.5, 4); g.fillStyle = '#575e65'; g.fillRect(10.6, -7, 3, 5.4); } // 肩扛发射筒
+      else { g.strokeStyle = '#22262b'; g.lineWidth = 2; g.beginPath(); g.moveTo(2.5, 1.8); g.lineTo(10.5, 1.8); g.stroke(); } // 步枪
+      g.restore();
+    }
+    g.fillStyle = '#101216'; g.fillRect(px - 9, py - 15, 18, 3); // 血条
+    g.fillStyle = u.side === 'P' ? '#5fe07a' : '#ff7a5c'; g.fillRect(px - 9, py - 15, 18 * Math.max(0, u.hp / u.maxHp), 3);
+  }
+  // ---- 渲染主函数 ----
+  function render() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.save(); ctx.translate(0, -S.camY);
+    if (terrainCv) ctx.drawImage(terrainCv, 0, S.camY, cv.width, CFG.viewH, 0, S.camY, cv.width, CFG.viewH);
+    else { ctx.fillStyle = '#71824c'; ctx.fillRect(0, S.camY, cv.width, CFG.viewH); }
+    // M4 润色：矿点晶体闪烁（动态微光，位置/相位由种子定死，不逐帧随机）
+    for (let oi = 0; oi < ORE.length; oi++) {
+      const o = ORE[oi], sr = mulberry32(7700 + oi);
+      for (let i = 0; i < 6; i++) {
+        const ox = (o.x + (sr() - 0.5) * 1.7) * CELL, oy = (o.y + (sr() - 0.5) * 1.0) * CELL, ph = sr() * Math.PI * 2;
+        const a = Math.max(0, Math.sin(S.time * 2.1 + ph));
+        if (a < 0.25) continue;
+        ctx.strokeStyle = 'rgba(255,244,170,' + (a * 0.9).toFixed(2) + ')'; ctx.lineWidth = 1.4;
+        const L = 3 + a * 3.4;
+        ctx.beginPath(); ctx.moveTo(ox - L, oy); ctx.lineTo(ox + L, oy); ctx.moveTo(ox, oy - L); ctx.lineTo(ox, oy + L); ctx.stroke();
+      }
+    }
+    // 增益站：金属圆台＋信标＋归属环＋占领进度
+    for (const stn of S.stations) {
+      const bx = stn.cx * CELL, by = stn.cy * CELL, R = CFG.boostRadius * CELL;
+      const oc = stn.owner === 'P' ? '#3a86d9' : stn.owner === 'E' ? '#d94f3a' : '#ffd94d';
+      ctx.beginPath(); ctx.arc(bx, by, R, 0, Math.PI * 2); ctx.fillStyle = stn.owner === 'P' ? 'rgba(58,134,217,0.20)' : stn.owner === 'E' ? 'rgba(217,79,58,0.20)' : 'rgba(255,217,77,0.12)'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = oc; ctx.stroke();
+      ctx.beginPath(); ctx.arc(bx, by, R * 0.55, 0, Math.PI * 2); ctx.fillStyle = '#5c6165'; ctx.fill(); ctx.strokeStyle = '#3a3e42'; ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.fillStyle = '#2e3339'; ctx.fillRect(bx - 2, by - 15, 4, 15);
+      ctx.fillStyle = (Math.sin(S.time * 4) > 0 ? '#ffe95c' : '#b8a42e'); ctx.beginPath(); ctx.arc(bx, by - 17, 3, 0, Math.PI * 2); ctx.fill();
+      if (stn.owner) { ctx.fillStyle = FCOL(stn.owner); ctx.beginPath(); ctx.moveTo(bx + 2, by - 14); ctx.lineTo(bx + 13, by - 10.6); ctx.lineTo(bx + 2, by - 7.2); ctx.closePath(); ctx.fill(); }
+      if (stn.prog !== 0 && Math.abs(stn.prog) < 1) { ctx.beginPath(); ctx.arc(bx, by, R - 5, -Math.PI / 2, -Math.PI / 2 + Math.abs(stn.prog) * Math.PI * 2); ctx.lineWidth = 4; ctx.strokeStyle = stn.prog > 0 ? '#3a86d9' : '#d94f3a'; ctx.stroke(); }
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('增益站', bx, by + 13);
+      ctx.font = '9px sans-serif'; ctx.fillText(stn.owner ? (boostActive(S, stn.owner) ? '收入+' + Math.round((CFG.boostIncomeMul * (S.boostMul || 1) - 1) * 100) + '%生效中' : '需2人驻守生效') : '入圈占领', bx, by + 25);
+    }
+    // 集结点旗
+    ctx.fillStyle = '#7dff8a'; ctx.fillRect(S.rally.x * CELL - 1, S.rally.y * CELL - 14, 2, 14); ctx.beginPath(); ctx.moveTo(S.rally.x * CELL + 1, S.rally.y * CELL - 14); ctx.lineTo(S.rally.x * CELL + 11, S.rally.y * CELL - 10); ctx.lineTo(S.rally.x * CELL + 1, S.rally.y * CELL - 6); ctx.fill();
+    // 放置预览
+    if (placementType && hover) {
+      const c = CFG.buildings[placementType], gx = Math.round(hover.x - c.size / 2), gy = Math.round(hover.y - c.size / 2);
+      ctx.fillStyle = canPlace(S, placementType, 'P', gx, gy) ? 'rgba(0,255,0,0.35)' : 'rgba(255,0,0,0.35)';
+      ctx.fillRect(gx * CELL, gy * CELL, c.size * CELL, c.size * CELL);
+    }
+    for (const b of S.buildings) if (b.hp > 0) drawBuilding(ctx, b);
+    for (const f of S.fx) { ctx.strokeStyle = f.side === 'P' ? 'rgba(140,205,255,0.8)' : 'rgba(255,140,105,0.8)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(f.x1 * CELL, f.y1 * CELL); ctx.lineTo(f.x2 * CELL, f.y2 * CELL); ctx.stroke(); ctx.fillStyle = 'rgba(255,240,180,0.9)'; ctx.fillRect(f.x2 * CELL - 1.6, f.y2 * CELL - 1.6, 3.2, 3.2); }
+    // 采矿车实体（车体＋矿舱；满载金舱、采掘时舱口开合微动）
+    for (const h of S.harvesters) {
+      const hx = h.x * CELL, hy = h.y * CELL;
+      ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.beginPath(); ctx.ellipse(hx, hy + 6, 11, 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#8a6a1c'; ctx.fillRect(hx - 10, hy - 4, 20, 9);
+      ctx.fillStyle = h.loaded ? '#f2c93c' : '#c9a437'; ctx.fillRect(hx - 8, hy - 8 + (h.phase === 'harvest' ? Math.sin(S.time * 9) * 1.1 : 0), 13, 5);
+      ctx.fillStyle = FCOL(h.side); ctx.fillRect(hx + 5, hy - 6, 5, 5);
+      ctx.fillStyle = '#1d2126'; ctx.fillRect(hx - 8, hy + 4, 4.4, 3.6); ctx.fillRect(hx + 3.6, hy + 4, 4.4, 3.6);
+      if (h.phase === 'unload') { ctx.fillStyle = '#ffd94d'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('卸货', hx, hy - 12); }
+    }
+    // 超武落点预警圈（己方金圈/敌方红圈；内圈随倒计时收缩，敌方附「轰炸预警」字样——预警可躲）
+    for (const p of S.swPending) {
+      const bx = p.x * CELL, by = p.y * CELL, R = CFG.superweapon.radius * CELL, frac = Math.max(0, p.t / CFG.superweapon.warnTime);
+      ctx.beginPath(); ctx.arc(bx, by, R, 0, Math.PI * 2);
+      ctx.fillStyle = p.side === 'P' ? 'rgba(255,217,77,0.13)' : 'rgba(255,50,30,0.16)'; ctx.fill();
+      ctx.lineWidth = 2.4; ctx.strokeStyle = p.side === 'P' ? '#ffd94d' : '#ff4030'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(bx, by, R * frac, 0, Math.PI * 2); ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(bx - R, by); ctx.lineTo(bx + R, by); ctx.moveTo(bx, by - R); ctx.lineTo(bx, by + R); ctx.lineWidth = 1; ctx.stroke();
+      if (p.side === 'E') { ctx.fillStyle = '#ff5040'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⚠ 轰炸预警 · 快撤！', bx, by - R - 6); }
+    }
+    for (const u of S.units) drawUnit(ctx, u);
+    // 建成展开环
+    for (const r of S.fxRings) { const k = r.t / r.max; ctx.beginPath(); ctx.arc(r.x * CELL, r.y * CELL, 6 + k * CELL * 1.15, 0, Math.PI * 2); ctx.strokeStyle = (r.side === 'P' ? 'rgba(125,180,240,' : 'rgba(255,138,112,') + (0.75 * (1 - k)).toFixed(2) + ')'; ctx.lineWidth = 2.4; ctx.stroke(); }
+    // M4 润色：爆炸粒子（死亡/超武落弹共用 fxBooms：闪光核＋扩散环＋火花）
+    for (const f of S.fxBooms) {
+      const k = f.t / f.max, bx = f.x * CELL, by = f.y * CELL, R = (f.big ? 34 : 15) * (0.35 + k);
+      ctx.beginPath(); ctx.arc(bx, by, R * 0.55, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,' + Math.round(190 - k * 90) + ',60,' + (0.55 * (1 - k)).toFixed(2) + ')'; ctx.fill();
+      ctx.beginPath(); ctx.arc(bx, by, R, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,160,70,' + (0.8 * (1 - k)).toFixed(2) + ')'; ctx.lineWidth = 2; ctx.stroke();
+      const sr = mulberry32(Math.floor(f.x * 91 + f.y * 57 + (f.big ? 7 : 3)));
+      ctx.fillStyle = 'rgba(255,220,130,' + (0.9 * (1 - k)).toFixed(2) + ')';
+      for (let i = 0; i < (f.big ? 8 : 4); i++) { const a = sr() * Math.PI * 2, d = R * (0.5 + sr() * 0.7); ctx.fillRect(bx + Math.cos(a) * d - 1.3, by + Math.sin(a) * d - 1.3, 2.6, 2.6); }
+    }
+    // 资金跳字（入账事件同源，上浮淡出）
+    for (const f of S.fxTexts) { const k = f.t / f.max; ctx.fillStyle = 'rgba(255,217,77,' + (1 - k).toFixed(2) + ')'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(f.text, f.x * CELL, f.y * CELL - k * 16); }
+    ctx.restore();
+    // 小地图竖条（雷达风）
+    mmx.clearRect(0, 0, 26, 170); mmx.fillStyle = '#0b140c'; mmx.fillRect(0, 0, 26, 170);
+    mmx.strokeStyle = 'rgba(90,220,120,0.14)'; mmx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) { mmx.beginPath(); mmx.moveTo(0, i * 42.5); mmx.lineTo(26, i * 42.5); mmx.stroke(); }
+    const my = v => v / CFG.rows * 170, mx2 = v => v / CFG.cols * 26;
+    if (powerInfo(S, 'P').low) { // 原版口径：低电时雷达熄灭（只剩框与离线字样）
+      mmx.fillStyle = 'rgba(150,40,30,0.85)'; mmx.font = 'bold 8px sans-serif'; mmx.textAlign = 'center';
+      mmx.fillText('雷达', 13, 78); mmx.fillText('离线', 13, 90); mmx.fillText('⚡不足', 13, 102);
+    } else {
+      const sa = (S.time * 0.7) % (Math.PI * 2); // 雷达扫描线
+      mmx.strokeStyle = 'rgba(120,255,150,0.35)'; mmx.beginPath(); mmx.moveTo(13, 85); mmx.lineTo(13 + Math.cos(sa) * 15, 85 + Math.sin(sa) * 88); mmx.stroke();
+      for (const b of S.buildings) if (b.hp > 0) { mmx.fillStyle = b.side === 'P' ? '#4da3ff' : '#ff7a5c'; mmx.fillRect(mx2(b.gx), my(b.gy), 4, 4); }
+      for (const u of S.units) { mmx.fillStyle = u.side === 'P' ? '#9fd0ff' : '#ffb09e'; mmx.fillRect(mx2(u.x) - 1, my(u.y) - 1, 2, 2); }
+      mmx.fillStyle = '#ffd94d'; for (const stn of S.stations) mmx.fillRect(mx2(stn.cx) - 2, my(stn.cy) - 2, 4, 4);
+      mmx.strokeStyle = '#fff'; mmx.strokeRect(0.5, my(S.camY / CELL), 25, my(CFG.viewH / CELL));
+    }
+  }
+
+// ---- HUD ----
+function compText(comp) { return Object.entries(comp).map(([t, n]) => CFG.units[t].name + '×' + n).join(' ');}
+function refreshHUD() {
+if (!S) return;
+$('funds').textContent = Math.floor(S.ecoP.funds);
+const pw = powerInfo(S, 'P'); $('power').textContent = pw.used + '/' + pw.supply + (pw.low? ' 低电!': '');
+$('powwrap').className = 'res' + (pw.low? ' pow low': '');
+// 电力条三段（原版口径）：绿＝充裕、黄＝耗电≥85% 临界、红＝低电
+const pfill = $('powfill');
+if (pfill) { const frac = pw.supply > 0 ? pw.used / pw.supply : 1; pfill.style.width = Math.min(100, frac * 100) + '%'; pfill.className = pw.low ? 'seg red' : (frac >= 0.85 ? 'seg yel' : 'seg grn'); }
+$('pop').textContent = popOf(S, 'P') + '/' + CFG.popCap;
+const mmss = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+$('clock').textContent = mmss(Math.max(0, S.time));
+const ehq = hqOf(S, 'E');
+$('enemyHQ').style.display = ehq? '': 'none';
+if (ehq) $('enemyHQ').firstElementChild.style.width = Math.max(0, ehq.hp / CFG.buildings.hq.hp * 100) + '%';
+$('myHQ').firstElementChild.style.width = Math.max(0, hqOf(S, 'P').hp / CFG.buildings.hq.hp * 100) + '%';
+if (S.mode === 'endless') {
+const E = S.endless, eAlive = S.units.some(u => u.side === 'E' && u.hp > 0);
+$('wavebar').textContent = '🌊 无尽第 ' + Math.max(1, E.wave) + ' 波 · 得分 ' + E.score + ' · 纪念星 ★' + E.stars + (eAlive? ' · 敌军压境中': ' · 下一波 ' + Math.max(0, Math.ceil(E.nextT)) + 's') + (pw.low? ' · ⚠低电': '');
+} else if (S.mode === 'daily' && S.daily) {
+$('wavebar').textContent = '📅 每日挑战 · 第' + (S.levelIdx + 1) + '关 ' + CFG.levels[S.levelIdx].name + ' · 修饰：' + S.daily.modName + '（每日挑战·本地记录）' + (S.waveIdx < S.waves.length? ' · ' + S.waves[S.waveIdx].label + ' ' + Math.max(0, Math.ceil(S.waves[S.waveIdx].t - S.time)) + 's': '');
+} else {
+const ownBoost = S.stations.some(s2 => s2.owner === 'P');
+$('wavebar').textContent = S.waveIdx < S.waves.length
+? '📣 ' + S.waves[S.waveIdx].label + '：' + compText(S.waves[S.waveIdx].comp) + ' · ' + Math.max(0, Math.ceil(S.waves[S.waveIdx].t - S.time)) + 's 后到达' + (ownBoost? ' · 增益站已占领': '')
+: '敌方持续增援中' + (ownBoost? ' · 增益站已占领(驻守2人享+30%)': S.stations.some(s2 => s2.owner === 'E')? ' · 增益站被敌占领': ' · 增益站未占领');
+}
+$('warn').style.display = (S.time - S.warnT < 2.5)? 'block': 'none';
+// UX-001：放置模式提示条
+$('placebar').style.display = placementType? 'flex': 'none';
+if (placementType) $('placetip').textContent = '🏗 正在放置：点地图绿色空地落位，红色为不可建造';
+// 超武按钮：充能环以百分比文字呈现，就绪高亮＋瞄准态
+const swb = $('swBtn');
+if (swb) { const pct = Math.floor(S.sw.charge / CFG.superweapon.chargeTime * 100); swb.disabled = !S.sw.ready; swb.classList.toggle('ready', S.sw.ready); swb.classList.toggle('on', swTargeting);
+swb.innerHTML = S.sw.ready? '💥 全线轰炸 · <small>已就绪！点此瞄准 → 点地图落点</small>': '💥 全线轰炸 · <small>充能中 ' + pct + '%（' + Math.ceil(CFG.superweapon.chargeTime - S.sw.charge) + 's）</small>'; }
+// L1 分步教学提示条（仅第 1 关战役模式；步骤由 save.tutorial 标记驱动）
+const tb = $('tutbar');
+if (tb) { const step = (S.mode === 'level' && S.levelIdx === 0)? tutStep(SAVE.tutorial): null;
+tb.style.display = step? 'block': 'none';
+if (step === 'build') tb.textContent = '📖 教学 1/3：点下方「建造」卡片，再点地图空地，建一座建筑扩大产能';
+else if (step === 'squad') tb.textContent = '📖 教学 2/3：点上方编队键「全军」选中部队（长按编队键＝只选半队）';
+else if (step === 'focus') tb.textContent = '📖 教学 3/3：选中部队后，直接点任意敌方单位或建筑 ＝ 集火攻击'; }
+document.querySelectorAll('#prodRow button').forEach(btn => {
+const type = btn.dataset.unit, from = CFG.units[type].from;
+const q = S.buildings.filter(b => b.side === 'P' && b.type === from).reduce((n, b) => n + b.queue.length, 0);
+btn.querySelector('small').textContent = CFG.units[type].cost + '金' + (q? ' · 队列' + q: '');
+btn.disabled =!S.buildings.some(b => b.side === 'P' && b.type === from &&!b.building && b.hp > 0);
+});
+document.querySelectorAll('#buildRow button').forEach(btn => { const t = btn.dataset.build; if (t === 'refinery') btn.querySelector('small').textContent = buildingCost(S, 'refinery', 'P') + '金' + (refineryCount(S, 'P') >= 2? ' · 已满2座': '');});
+refreshAdButtons();
+}
+// ---- 指令下达 ----
+function orderToSelection(orderFn) {
+const sel = S.units.filter(u => S.selection.includes(u.id));
+sel.forEach((u, i) => { const o = orderFn(u, i); if (o) setOrder(S, u, o);});
+}
+function formationDest(wx, wy, i) { return { x: wx + (i % 3 - 1) * 0.8, y: wy + Math.floor(i / 3) * 0.8};}
+function cancelPlacement() { placementType = null; document.querySelectorAll('#buildRow button').forEach(b => b.classList.remove('on'));}
+function tutMark(step) { // L1 教学步完成标记（只走 save 层落盘）
+if (S && S.mode === 'level' && S.levelIdx === 0 && !SAVE.tutorial[step]) { SAVE.tutorial[step] = true; saveSave(SAVE); }
+}
+function handleTap(p) {
+if (!S) return;
+const w = toWorld(p);
+if (swTargeting) { // 超武瞄准：点地图任意处为落点
+if (callStrike(S, w.x, w.y)) { swTargeting = false; sfx('order'); toast('💥 全线轰炸已发射！'); }
+return;
+}
+if (placementType) {
+const c = CFG.buildings[placementType], gx = Math.round(w.x - c.size / 2), gy = Math.round(w.y - c.size / 2);
+if (placeBuilding(S, placementType, gx, gy)) { cancelPlacement(); tutMark('build'); }
+return;
+}
+if (rallyMode) { S.rally = { x: w.x, y: w.y}; rallyMode = false; $('rallyBtn').classList.remove('on'); return;}
+const eUnit = S.units.find(u => u.side === 'E' && u.hp > 0 && Math.hypot(u.x - w.x, u.y - w.y) < 0.75);
+const eBld = S.buildings.find(b => b.side === 'E' && b.hp > 0 && w.x >= b.gx - 0.3 && w.x <= b.gx + b.size + 0.3 && w.y >= b.gy - 0.3 && w.y <= b.gy + b.size + 0.3);
+if ((eUnit || eBld) && S.selection.length) { const tid = (eUnit || eBld).id; orderToSelection(() => ({ type: 'focus', targetId: tid})); sfx('order'); tutMark('focus'); return;}
+const own = S.units.find(u => u.side === 'P' && Math.hypot(u.x - w.x, u.y - w.y) < 0.75);
+if (own) { S.selection = [own.id]; markSquadButtons(null); sfx('select'); return;}
+if (!S.selection.length) return;
+const now = performance.now(), isDouble = now - lastTap.t < 350 && Math.hypot(w.x - lastTap.x, w.y - lastTap.y) < 1.2;
+lastTap = { t: now, x: w.x, y: w.y};
+orderToSelection((u, i) => { const d = formationDest(w.x, w.y, i); return { type: isDouble? 'attackmove': 'move', x: d.x, y: d.y};});
+sfx('order');
+}
+// ---- 输入：拖动滚动 / 点按 ----
+cv.addEventListener('pointerdown', e => { if (!S) return; drag = { y: e.clientY, camY: S.camY, moved: false, p: toCanvas(e)}; cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove', e => { if (!S) return; const p = toCanvas(e); hover = toWorld(p); if (drag && Math.abs(e.clientY - drag.y) > 9) { drag.moved = true; introDone = true; S.camY = clampCam(drag.camY - (e.clientY - drag.y) * (cv.height / cv.getBoundingClientRect().height));}});
+cv.addEventListener('pointerup', e => { if (drag &&!drag.moved) handleTap(toCanvas(e)); drag = null;});
+cv.addEventListener('contextmenu', e => e.preventDefault());
+mm.addEventListener('pointerdown', e => { if (!S) return; const r = mm.getBoundingClientRect(), frac = (e.clientY - r.top) / r.height; introDone = true; S.camY = clampCam(frac * WORLD_H - CFG.viewH / 2);});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { cancelPlacement(); swTargeting = false; rallyMode = false; $('rallyBtn').classList.remove('on');}});
+$('swBtn').addEventListener('click', () => { if (!S || !S.sw.ready) return; swTargeting = !swTargeting; if (swTargeting) { cancelPlacement(); toast('💥 选择轰炸落点：点地图任意位置'); } });
+// ---- 编队键（点选整队/长按半队） ----
+function squadUnits(kind) {
+const us = S.units.filter(u => u.side === 'P' && u.hp > 0);
+if (kind === 'all') return us;
+if (kind === 'armor') return us.filter(u => u.cls === 'armor');
+return us.filter(u => u.type === kind);
+}
+function markSquadButtons(kind, half) { document.querySelectorAll('#squads button[data-squad]').forEach(b => { b.classList.toggle('on', b.dataset.squad === kind &&!half); b.classList.toggle('half', b.dataset.squad === kind &&!!half);});}
+function selectSquad(kind, half) { if (!S) return; const us = squadUnits(kind); const pick = half? us.slice(0, Math.ceil(us.length / 2)): us; S.selection = pick.map(u => u.id); markSquadButtons(kind, half); if (pick.length) { sfx('select'); tutMark('squad'); } }
+document.querySelectorAll('#squads button[data-squad]').forEach(btn => {
+let timer = null, fired = false;
+btn.addEventListener('pointerdown', e => { e.preventDefault(); fired = false; timer = setTimeout(() => { fired = true; selectSquad(btn.dataset.squad, true);}, 480);});
+const cancel = () => { if (timer) clearTimeout(timer); timer = null;};
+btn.addEventListener('pointerup', () => { cancel(); if (!fired) selectSquad(btn.dataset.squad, false);});
+btn.addEventListener('pointerleave', cancel);
+btn.addEventListener('contextmenu', e => e.preventDefault());
+});
+$('rallyBtn').addEventListener('click', () => { if (!S) return; rallyMode =!rallyMode; $('rallyBtn').classList.toggle('on', rallyMode);});
+// ---- 建造/造兵按钮 ----
+const buildRow = $('buildRow'), prodRow = $('prodRow');
+for (const t of ['power', 'refinery', 'barracks', 'factory', 'tower']) {
+const c = CFG.buildings[t], b = document.createElement('button');
+b.dataset.build = t; b.innerHTML = c.name + '<small>' + c.cost + '金</small>';
+b.addEventListener('click', () => { if (!S) return; placementType = placementType === t? null: t; document.querySelectorAll('#buildRow button').forEach(x => x.classList.toggle('on', x === b && placementType === t));});
+buildRow.appendChild(b);
+}
+for (const t of ['inf', 'rocket', 'ltank', 'htank']) {
+const c = CFG.units[t], b = document.createElement('button');
+b.dataset.unit = t; b.innerHTML = c.name + '<small>' + c.cost + '金</small>';
+b.addEventListener('click', () => { if (S) queueUnit(S, t, 'P');});
+prodRow.appendChild(b);
+}
+$('cancelPlace').addEventListener('click', cancelPlacement);
+// ---- 关卡选择 / 结算 / 流程 ----
+function starStr(n) { return '★★★'.slice(0, n) + '☆☆☆'.slice(0, 3 - n);}
+function renderMenu() {
+const grid = $('levelGrid'); grid.innerHTML = '';
+CFG.levels.forEach((L, i) => {
+const b = document.createElement('button');
+b.className = 'lvbtn'; b.dataset.level = i;
+const locked = i >= SAVE.unlocked;
+b.disabled = locked;
+b.innerHTML = '<b>第' + (i + 1) + '关 · ' + L.name + '</b><small>' + (locked? '🔒 通关上一关解锁': starStr(SAVE.stars[i]) + ' · 敌塔×' + L.towers.length + ' 增益站×' + L.stations.length) + '</small>';
+b.addEventListener('click', () => startLevel(i));
+grid.appendChild(b);
+});
+$('endlessInfo').textContent = SAVE.endlessBest > 0? '最佳得分 ' + SAVE.endlessBest + ' · 纪念星总账 ★' + SAVE.totalStars: '尚未出战 · 波次无尽递增，守住指挥中心';
+const DD = dailyForDate(dailyDateStr(new Date()));
+$('dailyInfo').textContent = '今日：第' + (DD.levelIdx + 1) + '关 · ' + CFG.levels[DD.levelIdx].name + ' · 修饰：' + DD.modName + ((SAVE.daily.date === DD.date && SAVE.daily.done)? ' · ✅ 今日已完成': ' · 完成奖纪念星 ★1') + '（每日挑战·本地记录）';
+}
+function resetTransient() {
+overShown = false; introDone = false; placementType = null; rallyMode = false; swTargeting = false; settleCtx = null; stationOwnersPrev = []; reviveSettleTried = false;
+document.querySelectorAll('#buildRow button').forEach(b => b.classList.remove('on'));
+$('rallyBtn').classList.remove('on'); $('over').style.display = 'none'; $('menu').style.display = 'none'; $('banner').style.display = 'block'; $('revivebar').style.display = 'none'; $('board').style.display = 'none';
+}
+function startLevel(idx) { S = initState(idx); resetTransient(); buildTerrain(); consumeInboxStart();}
+function startEndless() { S = initEndlessState(); resetTransient(); buildTerrain(); consumeInboxStart();}
+function startDaily() { S = initDailyState(); resetTransient(); buildTerrain(); consumeInboxStart();}
+function toMenu() { S = null; settleCtx = null; $('over').style.display = 'none'; $('revivebar').style.display = 'none'; renderMenu(); $('menu').style.display = 'block'; PLAT.settlePendingAds(); }
+let settleCtx = null; // 本局结算上下文（供广告「双倍星」发奖定位：{levelIdx, stars, doubled}）
+function settle() { // 结算：写存档（只经 save 层）；平台上报/统计/云同步只经 platform 分段
+const mmss = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+const R = battleReport(S); // 四行战报：用时/击毁/损失/剩余资金
+const reportHtml = '战报 · 用时 ' + mmss(R.time) + ' ｜ 击毁 ' + R.kills + ' ｜ 损失 ' + R.losses + ' ｜ 剩余资金 ' + R.funds;
+if (S.mode === 'endless') {
+const E = S.endless;
+if (E.score > SAVE.endlessBest) SAVE.endlessBest = E.score;
+if (E.stars > SAVE.endlessStars) SAVE.endlessStars = E.stars;
+if (E.stars > 0) SAVE.totalStars += E.stars; // 纪念星同账：本局所获（每 5 波 1 星）计入总账（M4）
+saveSave(SAVE);
+settleCtx = null;
+$('overTitle').textContent = '💥 防线陷落';
+$('overTitle').style.color = '#ff5a4d';
+$('overStars').textContent = '纪念星 ★' + E.stars + '（总账 ★' + SAVE.totalStars + '）';
+$('overStats').innerHTML = reportHtml + '<br>抵御波次 ' + E.wave + ' 波 · 本局得分 ' + E.score + '（历史最佳 ' + SAVE.endlessBest + '）';
+$('nextBtn').style.display = 'none'; $('restartBtn').textContent = '再战无尽';
+PLAT.submitEndless(E.score); // 无尽得分上报排行榜（钳制在 platform 内，失败静默）
+} else if (S.mode === 'daily') {
+const wonD = S.result === 'win';
+const awarded = awardDailyIfWon(SAVE, S, wonD);
+if (awarded) saveSave(SAVE);
+settleCtx = null;
+$('overTitle').textContent = wonD? '🏆 挑战完成': '💥 挑战失败';
+$('overTitle').style.color = wonD? '#ffd94d': '#ff5a4d';
+$('overStars').textContent = awarded? '纪念星 ★+1（总账 ★' + SAVE.totalStars + '）': (wonD? '今日奖励已领取': '');
+$('overStats').innerHTML = '📅 每日挑战 · 第' + (S.levelIdx + 1) + '关 ' + CFG.levels[S.levelIdx].name + ' · 修饰：' + S.daily.modName + '（每日挑战·本地记录）<br>' + reportHtml;
+$('nextBtn').style.display = 'none'; $('restartBtn').textContent = '再战今日挑战';
+} else {
+const L = CFG.levels[S.levelIdx], won = S.result === 'win';
+let stars = 0;
+if (won) {
+stars = calcStars(hqOf(S, 'P').hp / CFG.buildings.hq.hp, S.time, L.parTime);
+SAVE.stars[S.levelIdx] = Math.max(SAVE.stars[S.levelIdx], stars);
+SAVE.unlocked = Math.max(SAVE.unlocked, Math.min(8, S.levelIdx + 2));
+saveSave(SAVE);
+}
+settleCtx = won ? { levelIdx: S.levelIdx, stars, doubled: false } : null;
+$('overTitle').textContent = won? '🏆 胜利': '💥 败北';
+$('overTitle').style.color = won? '#ffd94d': '#ff5a4d';
+$('overStars').textContent = won? starStr(stars): '';
+$('overStats').innerHTML = '第' + (S.levelIdx + 1) + '关 · ' + L.name + '（三星线 ' + mmss(L.parTime) + '）<br>' + reportHtml + '<br>资金账本守恒 ' + (S.ecoP.check()? '✓': '✗');
+$('nextBtn').style.display = won && S.levelIdx < 7? '': 'none'; $('restartBtn').textContent = '再来一局';
+}
+PLAT.stats('finish'); // 全站统计：完局埋点（失败不挡）
+PLAT.cloudSync(); // 云存档上行同步（本地优先，失败静默）
+refreshAdButtons();
+$('over').style.display = 'block';
+}
+$('restartBtn').addEventListener('click', () => { if (!S) return; if (S.mode === 'endless') startEndless(); else if (S.mode === 'daily') startDaily(); else startLevel(S.levelIdx);});
+$('nextBtn').addEventListener('click', () => { if (S && S.mode === 'level' && S.levelIdx < 7) startLevel(S.levelIdx + 1);});
+$('menuBtn').addEventListener('click', toMenu);
+$('endlessBtn').addEventListener('click', startEndless);
+$('dailyBtn').addEventListener('click', startDaily);
+renderMenu();
+
+// ============ module: platform（浏览器接线：虎扑 SDK 单点接入；签名逐字按技能包原文，见 README 核对表） ============
+// 重要口径（与《意难平》施工书 C-1 主开发裁决一致）：平台 vatask 只管「看广告＋服务端自动记次数」，
+// 我方权益凭 availableChanceCount 差量发放（PENDING 记基线 base、差量落定才发、未落定拦截 ≤3 分钟且核对 ≤2 次、
+// 超时放行转后台队列续核、floor 水位防同一增量被多条待核重复领取、查询失败保留标记、12h 先核对后清理）。
+const store = pickStorage();
+let toastTimer = null;
+function toast(msg) { const t = $('toast'); if (!t) return; t.textContent = msg; t.style.display = 'block'; if (toastTimer) clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3400); }
+function loadInbox() { try { const j = JSON.parse((store && store.getItem(AD_INBOX_KEY)) || 'null'); return { start: (j && j.start) || 0, revive: (j && j.revive) || 0 }; } catch (e) { return { start: 0, revive: 0 }; } }
+function saveInbox(ib) { if (store) { try { store.setItem(AD_INBOX_KEY, JSON.stringify({ start: ib.start || 0, revive: ib.revive || 0 })); } catch (e) {} } }
+function vataskReady() { return !!(window.ColorboxAI && window.ColorboxAI.vatask && typeof window.ColorboxAI.vatask.completeRewardVideo === 'function' && typeof window.ColorboxAI.vatask.getActivityTaskState === 'function'); }
+function cloudReady() { return !!(window.QX_API_BASE && window.QX_ENV_ID && window.ColorboxAI && window.ColorboxAI.cloud && typeof window.ColorboxAI.cloud.request === 'function'); }
+function cloudSaveReady() { return !!(window.ColorboxAI && window.ColorboxAI.cloudSave && typeof window.ColorboxAI.cloudSave.setValue === 'function' && typeof window.ColorboxAI.cloudSave.getValue === 'function'); }
+function escapeHtml(v) { return String(v).replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch])); }
+
+const PLAT = {
+  adCount: null, adOk: false, busy: false, adDone: false,
+  cloudDropped: false, lastSync: 0, syncTimer: null, displayName: '指挥官', nameTried: false,
+  async refreshAdCount() {
+    if (!vataskReady()) { PLAT.adOk = false; PLAT.adCount = null; return; }
+    try {
+      const st = await window.ColorboxAI.vatask.getActivityTaskState(); // 无参（技能原文：活动 id 由底座配置自动注入）
+      if (st && st.code === 200 && st.data && typeof st.data.availableChanceCount === 'number') { PLAT.adCount = st.data.availableChanceCount; PLAT.adOk = true; }
+      else { PLAT.adOk = false; PLAT.adCount = null; }
+    } catch (e) { PLAT.adOk = false; PLAT.adCount = null; }
+  },
+  // 核对一轮待核队列并补发落定项（启动/回选关/拉广告前/结算后调用）
+  async settlePendingAds() {
+    const q = readAdQueue(store);
+    if (!q.items.length) return { granted: [], expired: [], remaining: [] };
+    await PLAT.refreshAdCount();
+    const r = settleAdQueue(q.items, q.floor, PLAT.adOk ? PLAT.adCount : null, Date.now());
+    writeAdQueue(store, r.remaining, r.floor);
+    for (const p of r.granted) applyAdGrant(p);
+    if (r.expired.length) toast('上一支广告奖励已过期（超过 12 小时未落账），已清理');
+    return r;
+  },
+  // 拉一支广告：kind ∈ start|double|revive。PENDING 先落盘后拉起；明确回执才删本条，抛错/无回执保留待核。
+  async watchAd(kind, snap) {
+    if (PLAT.busy || !vataskReady()) return false;
+    const pre = readAdQueue(store);
+    if (pre.items.length) {
+      const r = await PLAT.settlePendingAds();
+      if (adGateBlocked(r.remaining, Date.now())) { toast('上一支广告奖励核对中，请稍候片刻再试'); return false; }
+    }
+    await PLAT.refreshAdCount();
+    const token = Date.now() + '-' + kind + '-' + Math.random().toString(36).slice(2, 10);
+    const q = readAdQueue(store);
+    const items = q.items.concat([makeAdEntry(kind, PLAT.adOk ? PLAT.adCount : null, Date.now(), token, snap)]);
+    while (items.length > CFG.ad.queueCap) { const dropped = items.shift(); try { console.warn('[ad-pending] 待核队列已满(' + CFG.ad.queueCap + ')，清理最早一条', dropped.type, dropped.token || ''); } catch (e) {} }
+    writeAdQueue(store, items, q.floor || 0);
+    PLAT.busy = true; refreshAdButtons();
+    let receipt = 'none'; // ok＝明确获奖 / denied＝平台明确未获奖 / none＝抛错或无回执（保留待核）
+    try {
+      const res = await window.ColorboxAI.vatask.completeRewardVideo(); // 无参
+      if (res && res.code === 200 && res.data && res.data.rewarded) receipt = 'ok';
+      else if (res && res.data && res.data.reason === 'UNAVAILABLE') { receipt = 'denied'; PLAT.adDone = true; toast(res.message || '广告任务已完成或不可用'); }
+      else if (res && res.code === 200 && res.data) { receipt = 'denied'; toast(res.message || '未获得奖励'); }
+    } catch (e) { /* 无回执：PENDING 保留，靠差量核对补发 */ }
+    PLAT.busy = false;
+    await PLAT.refreshAdCount();
+    if (receipt !== 'none') {
+      const q3 = readAdQueue(store), idx = q3.items.findIndex(e => e.token === token);
+      if (idx >= 0) {
+        const ent = q3.items[idx]; q3.items.splice(idx, 1);
+        let fl = q3.floor || 0;
+        if (receipt === 'ok' && typeof ent.base === 'number') fl = Math.max(fl, ent.base + 1); // 本条增量已被回执领走，抬水位防旧待核误领
+        writeAdQueue(store, q3.items, fl);
+      }
+      if (receipt === 'ok') applyAdGrant({ type: kind, snap });
+    } else {
+      toast('广告回执异常，奖励将自动核对补发');
+      await PLAT.settlePendingAds();
+    }
+    refreshAdButtons();
+    return receipt === 'ok';
+  },
+  // 无尽得分上报（模板 submit 只收 {score, displayName}、只保留历史最高；分数先钳制 ≤50000）
+  async submitEndless(score) {
+    if (!cloudReady()) return;
+    const s = clampSubmitScore(score); if (s <= 0) return;
+    try {
+      await PLAT.ensureName();
+      const auth = await window.ColorboxAI.cloud.auth({ envId: window.QX_ENV_ID });
+      if (!auth || auth.code !== 200) return;
+      await window.ColorboxAI.cloud.request({ url: window.QX_API_BASE + '/api/leaderboard/submit', method: 'POST', data: { score: s, displayName: PLAT.displayName }, envId: window.QX_ENV_ID, auth: true });
+    } catch (e) { /* 失败静默：本地最佳已落存档，不挡游戏 */ }
+  },
+  async fetchBoard(cb) {
+    if (!cloudReady()) { cb(null, null, 'unconfigured'); return; }
+    try {
+      const auth = await window.ColorboxAI.cloud.auth({ envId: window.QX_ENV_ID });
+      if (!auth || auth.code !== 200) { cb(null, null, 'login'); return; }
+      const req = async path => {
+        const r = await window.ColorboxAI.cloud.request({ url: window.QX_API_BASE + path, method: 'GET', envId: window.QX_ENV_ID, auth: true });
+        if (!r || (r.code !== 0 && r.code !== 200)) throw new Error((r && r.message) || '榜单加载失败'); // CloudBase 链路 code 0、SDK 链路 200，双轨兼容
+        return r.data;
+      };
+      const [entries, mine] = await Promise.all([req('/api/leaderboard'), req('/api/leaderboard/me')]);
+      cb(Array.isArray(entries) ? entries : [], mine || null, null);
+    } catch (e) { cb(null, null, 'failed'); }
+  },
+  async ensureName() {
+    if (PLAT.nameTried) return; PLAT.nameTried = true;
+    try {
+      if (window.ColorboxAI && window.ColorboxAI.auth && typeof window.ColorboxAI.auth.getUserInfo === 'function') {
+        const r = await window.ColorboxAI.auth.getUserInfo();
+        if (r && r.code === 200 && r.data && r.data.nickname) PLAT.displayName = String(r.data.nickname).slice(0, 40);
+      }
+    } catch (e) {}
+  },
+  // 云存档上行（SDK 托管键值；≥3 秒节流合并；code 204 dropped 后本会话停写）
+  cloudSync(force) {
+    if (!cloudSaveReady() || PLAT.cloudDropped) return;
+    const now = Date.now();
+    if (!force && now - PLAT.lastSync < 3000) {
+      if (!PLAT.syncTimer) PLAT.syncTimer = setTimeout(() => { PLAT.syncTimer = null; PLAT.cloudSync(true); }, 3100);
+      return;
+    }
+    PLAT.lastSync = now;
+    try {
+      const p = window.ColorboxAI.cloudSave.setValue({ key: SAVE_KEY, value: JSON.stringify(normalizeSave(SAVE)) });
+      if (p && typeof p.then === 'function') p.then(r => { if (r && r.code === 204 && r.data && r.data.result && r.data.dropped === true) PLAT.cloudDropped = true; }).catch(() => {});
+    } catch (e) {}
+  },
+  // 云存档恢复（启动时）：云端与本地逐项合并取高，云端为空则把本地补传一次；失败按无云存档处理、不覆盖本地
+  async cloudRestore() {
+    if (!cloudSaveReady()) return;
+    try {
+      const r = await window.ColorboxAI.cloudSave.getValue({ key: SAVE_KEY });
+      if (!r || r.code !== 200) return;
+      if (r.data === null || r.data === undefined) { PLAT.cloudSync(true); return; }
+      const merged = mergeSaveHigh(SAVE, r.data);
+      if (merged && JSON.stringify(merged) !== JSON.stringify(normalizeSave(SAVE))) { SAVE = merged; saveSave(SAVE); renderMenu(); }
+    } catch (e) {}
+  },
+  // 全站统计计数（启动/完局各一埋点；走 act-cloudbase 基线 activity_api 计数端点，部署时加路由；失败不挡）
+  stats(kind) {
+    if (!cloudReady()) return;
+    try {
+      const p = window.ColorboxAI.cloud.request({ url: window.QX_API_BASE + '/api/stats/count', method: 'POST', data: { kind }, envId: window.QX_ENV_ID, auth: true });
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (e) {}
+  },
+};
+// 广告发奖（差量落定或当次回执确认后调用；无法当场生效的入 inbox 跨局发放，绝不静默吞掉）
+function applyAdGrant(p) {
+  if (p.type === 'start') {
+    if (S && !S.over && !S.adStartUsed) { S.adStartUsed = true; S.ecoP.earn(CFG.ad.startBonus, 'ad_start'); toast('广告奖励已发放：开局资金 +' + CFG.ad.startBonus); }
+    else { const ib = loadInbox(); ib.start = (ib.start || 0) + 1; saveInbox(ib); toast('广告奖励已存入：下局开局资金 +' + CFG.ad.startBonus); }
+  } else if (p.type === 'double' && p.snap && typeof p.snap.levelIdx === 'number') {
+    const i = p.snap.levelIdx, dbl = Math.min(3, (p.snap.stars || 0) * 2);
+    if (dbl > (SAVE.stars[i] || 0)) { SAVE.stars[i] = dbl; saveSave(SAVE); PLAT.cloudSync(); }
+    if (settleCtx && settleCtx.levelIdx === i && !settleCtx.doubled) { settleCtx.doubled = true; settleCtx.stars = Math.max(settleCtx.stars, dbl); $('overStars').textContent = starStr(settleCtx.stars); }
+    toast('广告奖励已发放：本局星数翻倍结算（' + dbl + ' 星）');
+    refreshAdButtons();
+  } else if (p.type === 'revive') {
+    if (S && S.mode === 'endless' && S.reviveOffer) doRevive();
+    else { const ib = loadInbox(); ib.revive = 1; saveInbox(ib); toast('广告奖励已存入：无尽续命 ×1（下次濒败自动生效）'); }
+  }
+}
+function doRevive() { if (S && applyRevive(S)) { toast('续命成功：指挥中心已修复至 30%'); $('revivebar').style.display = 'none'; } }
+function giveUpRevive() { // 放弃续命：按判负收尾（计分公式同 updateGame 判负分支）
+  if (!S || !S.reviveOffer) return;
+  S.reviveOffer = false; S.reviveUsed = true; S.over = true; S.result = 'lose';
+  S.endless.score = endlessScore(S.endless.wave, S.killCost, S.time);
+  $('revivebar').style.display = 'none';
+}
+// 开局消费存入的开局资金奖励（补发跨局落点）
+function consumeInboxStart() {
+  const ib = loadInbox();
+  if (ib.start > 0 && S) { ib.start--; saveInbox(ib); S.adStartUsed = true; S.ecoP.earn(CFG.ad.startBonus, 'ad_start'); setTimeout(() => toast('已发放存入的开局资金 +' + CFG.ad.startBonus), 400); }
+}
+// ---- 合成确认音（WebAudio 合成短促电子音，无任何素材采样；选中/指令/占领三类） ----
+let AC = null;
+function sfx(kind) {
+  try {
+    const Ctor = window.AudioContext || window.webkitAudioContext; if (!Ctor) return;
+    AC = AC || new Ctor(); if (AC.state === 'suspended') AC.resume();
+    const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'square'; o.connect(g); g.connect(AC.destination); g.gain.setValueAtTime(0.04, t);
+    if (kind === 'select') o.frequency.setValueAtTime(880, t);
+    else if (kind === 'order') o.frequency.setValueAtTime(620, t);
+    else if (kind === 'capture') { o.frequency.setValueAtTime(520, t); o.frequency.setValueAtTime(790, t + 0.07); }
+    o.start(t); g.gain.exponentialRampToValueAtTime(0.001, t + (kind === 'capture' ? 0.17 : 0.09)); o.stop(t + 0.18);
+  } catch (e) {}
+}
+// ---- 广告按钮显隐/禁用 ----
+function refreshAdButtons() {
+  const ready = vataskReady() && !PLAT.adDone;
+  const sb = $('adStartBtn');
+  if (sb) { const show = !!S && !S.over && !S.adStartUsed && ready; sb.style.display = show ? '' : 'none'; sb.disabled = PLAT.busy; sb.textContent = PLAT.busy ? '📺 广告播放中…' : '📺 看广告 · 开局资金 +' + CFG.ad.startBonus; }
+  const db = $('adDoubleBtn');
+  if (db) { const show = !!settleCtx && !settleCtx.doubled && settleCtx.stars > 0 && settleCtx.stars < 3 && ready && $('over').style.display === 'block'; db.style.display = show ? '' : 'none'; db.disabled = PLAT.busy; }
+  const rb = $('adReviveBtn');
+  if (rb) rb.disabled = PLAT.busy;
+}
+// ---- 排行榜页 ----
+function openBoard() {
+  $('board').style.display = 'block';
+  $('boardList').innerHTML = '<div class="brow dim">本地最佳：无尽得分 ' + SAVE.endlessBest + ' · 纪念星总账 ★' + SAVE.totalStars + '</div><div class="brow dim">正在加载全站榜单…</div>';
+  $('boardMine').textContent = '';
+  PLAT.fetchBoard((entries, mine, err) => {
+    if (err) {
+      $('boardList').innerHTML = '<div class="brow dim">本地最佳：无尽得分 ' + SAVE.endlessBest + ' · 纪念星总账 ★' + SAVE.totalStars + '</div>' +
+        '<div class="brow dim">' + (err === 'unconfigured' ? '全站榜单待部署配置网关后生效（本地备包未回写 ACTIVITY_API_BASE/ENV_ID）' : err === 'login' ? '请先登录虎扑后查看榜单' : '榜单加载失败，请稍后再试') + '</div>';
+      return;
+    }
+    if (!entries.length) { $('boardList').innerHTML = '<div class="brow dim">暂时还没有成绩，来打下第一名</div>'; }
+    else $('boardList').innerHTML = entries.map(e => '<div class="brow' + (e.isCurrent ? ' me' : '') + '"><span class="rk">' + e.rank + '</span><span class="nm">' + escapeHtml(e.displayName || '指挥官') + (e.isCurrent ? '（我）' : '') + '</span><span class="sc num">' + Number(e.score).toLocaleString('zh-CN') + '</span></div>').join('');
+    $('boardMine').textContent = mine ? '我的排名：第 ' + mine.rank + ' 名 · ' + mine.score + ' 分' : '我暂未上榜（打一局无尽并结算即上报）';
+  });
+}
+$('boardBtn').addEventListener('click', openBoard);
+$('boardClose').addEventListener('click', () => { $('board').style.display = 'none'; });
+$('adStartBtn').addEventListener('click', () => { if (S && !S.adStartUsed) PLAT.watchAd('start', null); });
+$('adDoubleBtn').addEventListener('click', () => { if (settleCtx && !settleCtx.doubled) PLAT.watchAd('double', { levelIdx: settleCtx.levelIdx, stars: settleCtx.stars }); });
+$('adReviveBtn').addEventListener('click', () => { if (S && S.reviveOffer) PLAT.watchAd('revive', null); });
+$('reviveGiveUp').addEventListener('click', giveUpRevive);
+// 安全距：启动时读一次，只计入 #hud 一处（技能原文：同一内容只避让一次；无法获取返回 0）
+(function applySafeTop() { let v = 0; try { if (window.ColorboxAI && typeof window.ColorboxAI.getFullscreenSafeTop === 'function') v = window.ColorboxAI.getFullscreenSafeTop() || 0; } catch (e) {} document.documentElement.style.setProperty('--safe-top', (Number(v) || 0) + 'px'); })();
+// 平台启动动作：全站统计启动计数、云存档恢复、待核队列核对（全部失败静默不挡游戏）
+PLAT.stats('launch');
+PLAT.cloudRestore();
+PLAT.settlePendingAds();
+// ---- 主循环 ----
+let lastTs = 0, stationOwnersPrev = [], reviveSettleTried = false;
+function loop(ts) {
+requestAnimationFrame(loop);
+const dt = Math.min(0.05, lastTs? (ts - lastTs) / 1000: 0.016); lastTs = ts;
+if (!S) return;
+if (dt > 0) fpsEMA += ((1 / dt) - fpsEMA) * 0.05;
+if (!introDone) { const k = Math.max(0, Math.min(1, (S.time - 0.5) / 1.8)), ease = k * k * (3 - 2 * k); S.camY = MAXCAM * ease; if (k >= 1) introDone = true;}
+$('banner').textContent = S.time < 3.2? (S.mode === 'endless'? '守住指挥中心': '摧毁敌方指挥中心'): '';
+updateGame(S, dt);
+// 续命抉择：已存续命（广告补发跨局落点）优先自动生效；否则亮抉择条并核对一轮待核队列（待核的续命落定即自动复活）
+if (S.reviveOffer) {
+const ib = loadInbox();
+if (ib.revive > 0) { ib.revive = 0; saveInbox(ib); doRevive(); toast('已使用存入的续命：指挥中心修复至 30%'); }
+else { $('revivebar').style.display = 'flex'; if (!reviveSettleTried) { reviveSettleTried = true; PLAT.settlePendingAds(); } }
+} else { $('revivebar').style.display = 'none'; reviveSettleTried = false; }
+// 占领音效：任一增益站归属翻为己方时播合成确认音（UI 侧只读检测，不写状态）
+S.stations.forEach((stn, i) => { if (stationOwnersPrev[i] !== 'P' && stn.owner === 'P') sfx('capture'); stationOwnersPrev[i] = stn.owner; });
+hudT -= dt; if (hudT <= 0) { hudT = 0.15; refreshHUD();}
+fpsT -= dt; if (fpsT <= 0) { fpsT = 0.5; $('fps').textContent = 'FPS ' + Math.round(fpsEMA);}
+render();
+if (S.over &&!overShown) { overShown = true; settle();}
+}
+requestAnimationFrame(loop);
+window.QX_DEBUG = { get state() { return S;}, CFG, spawn: (side, type, x, y) => S? mkUnit(S, type, side, x, y): null, initState, initEndlessState, updateGame,
+startLevel, startEndless, startDaily, dailyForDate, dailyDateStr, callStrike: (x, y) => S? callStrike(S, x, y): false, strikeDamage: (x, y, side) => S? strikeDamage(S, x, y, side || 'P'): 0,
+canPlace, placeBuilding, queueUnit, setOrder, getSave: () => SAVE,
+PLAT, adQueue: () => readAdQueue(store), settleAds: () => PLAT.settlePendingAds(), watchAd: (k, s) => PLAT.watchAd(k, s), openBoard, applyRevive: () => S? applyRevive(S): false};
+}
+
+// ============ Node 导出守卫（供 test_logic.js require） ============
+if (typeof module!== 'undefined' && module.exports) {
+module.exports = { CFG, damageMultiplier, dpsAgainst, refineryPayback, createEconomy, simulateBattle,
+calcStars, endlessBudgetFor, endlessWaveComp, endlessScore,
+defaultSave, normalizeSave, loadSave, saveSave, SAVE_KEY,
+initState, initEndlessState, applyLevel, updateGame, checkWinner, powerInfo, refineryCount, canPlace, placeBuilding, buildingCost, queueUnit, popOf, boostActive,
+clampSubmitScore, mergeSaveHigh, battleReport, applyRevive,
+swTick, callStrike, strikeDamage, updateSuperweapon, playerClusterCenter,
+dailyDateStr, dailySeedFrom, dailyForDate, applyDailyMods, initDailyState, awardDailyIfWon, tutStep,
+AD_MAIN_KEY, AD_BG_KEY, AD_INBOX_KEY, readAdQueue, writeAdQueue, makeAdEntry, settleAdQueue, adGateBlocked};
+}
+
+</script>
+</body>
+</html>
