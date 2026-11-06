@@ -945,16 +945,28 @@ function targetOf(state, t) { // 统一目标描述（伤害函数入参）
   return t.kind === 'building' ? { kind: 'building' } : { kind: 'unit', cls: t.cls, type: t.type };
 }
 function distTo(u, t) { const r = t.kind === 'building' ? Math.max(t.size / 2, 0.8) : 0.32; return Math.max(0, Math.hypot(t.x - u.x, t.y - u.y) - r); }
+function foeScore(state, u, e, d) { // M12 集火评分（越低越优先）：距离 − 已集火友军数×0.85（封顶 3 人）− 残血度×1.05 → 全军自然多打一、先收残血
+  let f = 0; for (const a of state.units) if (a.side === u.side && a !== u && a.hp > 0 && a.combatTarget === e) f++;
+  return d - Math.min(f, 3) * 0.85 - (1 - e.hp / e.maxHp) * 1.05;
+}
 function acquire(state, u) {
-  // 优先级：集火目标 > 攻击自己的敌人 > 射程内最近敌人 > 建筑
+  // M12 索敌重做。优先级：玩家集火令 > 近身还手（打我的人且马上够得着）> 集火评分（多打一/收残血，带目标黏性）> 无其他目标时远追打我的人 > 建筑
+  // 旧版两病：①人人单挑各自的攻击者、火力分散；②纯移动单位被射程外敌人（火箭兵打步兵）白打不还手、贴身有战也不参战（主人 2026-11-06 实玩反馈）
   const foes = state.units.filter(e => e.side !== u.side && e.hp > 0);
   if (u.order.type === 'focus') { const t = findById(state, u.order.targetId); if (t && t.hp > 0) return t; u.order = { type: 'attackmove', x: u.x, y: u.y }; }
+  const rngU = CFG.units[u.type].range;
   const atk = foes.find(e => e.id === u.lastAttackerId);
-  if (atk && Math.hypot(atk.x - u.x, atk.y - u.y) <= CFG.sight + 1.5) return atk;
+  if (atk && distTo(u, atk) <= rngU + 1.3) return atk;
   const engage = u.order.type === 'attackmove' || u.order.type === 'idle' || u.order.type === 'focus' || u.order.type === 'guard'; // M11：守军同口径索敌（追击半径在 updateUnits 按守点裁决）
-  let best = null, bd = engage ? CFG.sight : CFG.units[u.type].range + 0.4;
-  for (const e of foes) { const d = Math.hypot(e.x - u.x, e.y - u.y); if (d < bd) { bd = d; best = e; } }
-  if (best) return best;
+  const R = engage ? CFG.sight : rngU + 1.6; // 纯移动：候选圈＝射程外 1.6 格（贴身范围），且只收「打我的人/已在交战的敌人」
+  let best = null, bs = Infinity;
+  for (const e of foes) { const d = Math.hypot(e.x - u.x, e.y - u.y); if (d > R) continue; if (!engage && e.id !== u.lastAttackerId && !e.combatTarget) continue; const s = foeScore(state, u, e, d); if (s < bs) { bs = s; best = e; } }
+  if (best) { // 目标黏性：现目标评分没差出 0.7 就不换，防 0.2s 一跳的集火抖动
+    const cur = u.combatTarget;
+    if (cur && cur.kind !== 'building' && cur.hp > 0 && cur.side !== u.side) { const dc = Math.hypot(cur.x - u.x, cur.y - u.y); if (dc <= R + 0.6 && foeScore(state, u, cur, dc) <= bs + 0.7) return cur; }
+    return best;
+  }
+  if (engage && atk && Math.hypot(atk.x - u.x, atk.y - u.y) <= CFG.sight + 1.5) return atk; // 视野内无其他目标：远追打我的人（如射程外火箭兵），不再站着挨打
   if (engage) { // 建筑兜底：射程内或攻击前进时最近建筑
     let bb = null, bbd = u.order.type === 'attackmove' ? CFG.sight + 2 : CFG.units[u.type].range + 0.4;
     for (const b of state.buildings) { if (b.side === u.side || b.hp <= 0 || b.building) continue; const d = distTo(u, b); if (d < bbd) { bbd = d; bb = b; } }
@@ -1022,7 +1034,7 @@ function updateUnits(state, dt) {
       u.hp = Math.min(u.maxHp, u.hp + CFG.duel.guardHeal * dt);
       continue;
     }
-    if (t && (u.order.type === 'focus' || u.order.type === 'attackmove' || u.order.type === 'idle')) { moveAlong(state, u, t.x, t.y, dt); continue; }
+    if (t && (u.order.type === 'focus' || u.order.type === 'attackmove' || u.order.type === 'idle' || (u.order.type === 'move' && t.kind !== 'building'))) { moveAlong(state, u, t.x, t.y, dt); continue; } // M12：纯移动单位也会追打还手目标/贴身交战目标，打完自动回原移动令
     if (u.order.type === 'move' || u.order.type === 'attackmove') {
       const arrived = moveAlong(state, u, u.order.x, u.order.y, dt);
       if (arrived) u.order = { type: 'idle' };
