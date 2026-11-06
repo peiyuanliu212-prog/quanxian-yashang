@@ -62,7 +62,7 @@
   canvas#minimap { position:absolute; right:4px; top:8px; width:26px; height:170px; background:rgba(0,0,0,.45); border:2px solid #4a545f; outline:1px solid rgba(190,215,240,.28); box-shadow:0 0 0 2px #14171b, 0 2px 7px rgba(0,0,0,.55); z-index:4; }
   #fps { position:absolute; left:6px; top:6px; font-size:10px; color:#9f9; text-shadow:0 0 2px #000; z-index:4; }
   /* 底部控制台：深灰金属＋阵营蓝点缀 */
-  #ctrl { background:linear-gradient(#2a2e33,#1d2024); padding:6px; border-top:3px solid #59636d; box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 0 1px rgba(0,0,0,.35); position:relative; flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  #ctrl { background:linear-gradient(#2a2e33,#1d2024); padding:6px; border-top:3px solid #59636d; box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 0 1px rgba(0,0,0,.35); position:relative; flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; touch-action:none; }
   .btnrow { display:flex; gap:5px; margin-bottom:5px; flex-wrap:wrap; }
   .btnrow:last-child { margin-bottom:0; }
   #ctrl button { flex:1; min-width:0; background:linear-gradient(#3a4046,#2c3136); color:#e8ebee; border:1px solid #59636d; border-radius:5px; padding:8px 2px; font-size:12px; line-height:1.25; cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:none; box-shadow:inset 0 1px 0 rgba(255,255,255,.08); }
@@ -1028,8 +1028,8 @@ function moveAlong(state, u, tx, ty, dt) {
 function fireFx(state, u, t) {
   if (state.sndQ && state.sndQ.length < 32) state.sndQ.push(u.type);
   const sx = u.x, sy = u.y, tx = t.x, ty = t.y, d = Math.max(0.5, Math.hypot(tx - sx, ty - sy));
-  if (u.type === 'inf') {
-    state.fx.push({ kind: 'slash', x: tx, y: ty, ang: Math.atan2(ty - sy, tx - sx), t: 0, max: 0.13, side: u.side });
+  if (u.type === 'inf') { // slash 锚在攻击者（x,y=出手者，tx,ty=目标）：渲染层在出手者手边画小刀劈砍（主人定「小刀攻击挥舞」）
+    state.fx.push({ kind: 'slash', x: sx, y: sy, tx, ty, ang: Math.atan2(ty - sy, tx - sx), t: 0, max: 0.16, side: u.side });
     for (let i = 0; i < 2; i++) state.fx.push({ kind: 'spark', x: tx, y: ty, vx: (Math.random() - 0.5) * 2.4, vy: (Math.random() - 0.9) * 2.2, t: 0, max: 0.14, side: u.side });
   } else if (u.type === 'rocket') {
     state.fx.push({ kind: 'rocket', x0: sx, y0: sy, x1: sx, y1: sy, x2: tx, y2: ty, t: 0, dur: d / 13, side: u.side });
@@ -1810,12 +1810,16 @@ if (typeof document !== 'undefined') {
       } else if (f.kind === 'spark') {
         ctx.fillStyle = 'rgba(255,215,110,0.95)';
         ctx.fillRect((f.x + f.vx * f.t) * CELL - 1.2, (f.y + f.vy * f.t + 3.4 * f.t * f.t) * CELL - 1.2, 2.4, 2.4);
-      } else if (f.kind === 'slash') { // 步兵近战挥砍：一道弧光绕目标身位扫过，扫角随进度推进、整体渐隐
-        const p = Math.min(1, f.t / f.max), a0 = f.ang - 1.15 + p * 1.5;
-        ctx.strokeStyle = 'rgba(255,244,200,' + (0.95 * (1 - p * 0.55)).toFixed(2) + ')'; ctx.lineWidth = 2.6;
-        ctx.beginPath(); ctx.arc(f.x * CELL, f.y * CELL, 12, a0, a0 + 0.85); ctx.stroke();
-        ctx.strokeStyle = 'rgba(255,255,255,' + (0.85 * (1 - p * 0.55)).toFixed(2) + ')'; ctx.lineWidth = 1.2;
-        ctx.beginPath(); ctx.arc(f.x * CELL, f.y * CELL, 8.5, a0 + 0.1, a0 + 0.7); ctx.stroke();
+      } else if (f.kind === 'slash') { // 步兵近战（主人定「小刀攻击挥舞」）：小刀在攻击者手边朝目标方向劈砍——刀柄＋刀身实体绘制，扫角随进度从一侧劈到另一侧，末段淡出，附一道挥砍残光弧
+        const p = Math.min(1, f.t / f.max), fade = p < 0.65 ? 1 : Math.max(0, 1 - (p - 0.65) / 0.35);
+        const hx = f.x * CELL + Math.cos(f.ang) * 8, hy = f.y * CELL + Math.sin(f.ang) * 8; // 出手点：攻击者朝目标一侧的手边
+        ctx.save(); ctx.translate(hx, hy); ctx.rotate(f.ang - 0.95 + p * 1.9); ctx.globalAlpha = fade;
+        ctx.fillStyle = '#7a5230'; ctx.fillRect(-1.5, -1.3, 5, 2.6); // 刀柄
+        ctx.fillStyle = '#dfe6ec'; ctx.beginPath(); ctx.moveTo(3.5, -2); ctx.lineTo(13.5, -0.9); ctx.lineTo(15.5, 0.4); ctx.lineTo(13.5, 1.6); ctx.lineTo(3.5, 1.7); ctx.closePath(); ctx.fill(); // 刀身
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(4, -1.2); ctx.lineTo(13.8, -0.2); ctx.stroke(); // 刃口高光
+        ctx.restore();
+        ctx.strokeStyle = 'rgba(255,244,200,' + (0.5 * fade).toFixed(2) + ')'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(hx, hy, 15.5, f.ang - 0.95, f.ang - 0.95 + p * 1.9); ctx.stroke(); // 残光弧随刀尖轨迹张开
       } else { // tracer：短促黄白曳光＋命中点
         ctx.strokeStyle = 'rgba(255,236,170,0.9)'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(f.x1 * CELL, f.y1 * CELL); ctx.lineTo(f.x2 * CELL, f.y2 * CELL); ctx.stroke();
         ctx.fillStyle = 'rgba(255,240,180,0.9)'; ctx.fillRect(f.x2 * CELL - 1.6, f.y2 * CELL - 1.6, 3.2, 3.2);
@@ -2052,6 +2056,19 @@ orderToSelection((u, i) => { const d = formationDest(w.x, w.y, i); return { type
 if (guideRt) { if (isDouble) guideRt.attackOrdered = true; else guideRt.moved = true; }
 sfx('order');
 }
+// ---- 控制台手动拖动滚动（M12 夜批二，主人真机反馈「下面滑不动」）----
+// 病根：#ctrl button 的 touch-action:none 让浏览器判定整个面板不可平移滚动——面板表面几乎全是按钮，手指拖哪都不滚；滚轮/JS 赋值不受此限，故机器走查全绿、真机全废。
+// 解法：#ctrl 设 touch-action:none 后由 JS 接管拖动（scrollTop 按手指位移直写），不依赖任何浏览器/ WebView 的原生滚动实现；拖动超过 7px 判定为滚动：给起始按钮补发 pointercancel（清长按计时）、松手后的 click 在捕获相吞掉防误触。轻点（未过阈值）完全不干预，原点击/长按链路不变。
+(function () { const el = $('ctrl'); if (!el) return; let dg = null, suppressClick = false;
+  el.addEventListener('pointerdown', e => { dg = { y: e.clientY, top: el.scrollTop, moved: false, target: e.target, id: e.pointerId }; });
+  el.addEventListener('pointermove', e => { if (!dg) return; const dy = e.clientY - dg.y;
+    if (!dg.moved && Math.abs(dy) > 7) { dg.moved = true; try { const cev = new PointerEvent('pointercancel', { bubbles: true }); cev.__selfCancel = true; dg.target.dispatchEvent(cev); } catch (_) {} try { el.setPointerCapture(dg.id); } catch (_) {} } // 过阈值才夺捕获：轻点时不夺，保证按钮 click 照常落在按钮上。自派 cancel 必须打标记——它会冒泡回 #ctrl，若被自家 pointercancel 监听当真，dg 当场被清、拖动未滚先死（首版就死在这，实测坐实）
+    if (dg.moved) el.scrollTop = dg.top - dy; });
+  const end = () => { if (dg && dg.moved) { suppressClick = true; setTimeout(() => { suppressClick = false; }, 80); } dg = null; };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', e => { if (e.__selfCancel) return; dg = null; });
+  el.addEventListener('click', e => { if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; } }, true);
+})();
 // ---- 输入：拖动滚动 / 点按 ----
 cv.addEventListener('pointerdown', e => { if (!S) return; e.preventDefault(); drag = { y: e.clientY, camY: S.camY, moved: false, p: toCanvas(e)}; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
 cv.addEventListener('pointercancel', () => { drag = null; });
@@ -2526,12 +2543,12 @@ function sfxWhistle() { // 导弹来袭呼啸：高音滑降（与 0.8s 预警�
       o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + 0.82); }
   } catch (e) {} }
 const sndLast = {}; // 武器音效限流时间戳（UI 侧）
-function sfxShot(w) { // 战斗开火声（全合成零采样）：步兵=刀枪相撞金属响（M12 夜批近战化）/火箭=呼啸发射/轻坦=炮响/重坦=重炮/机枪塔=连发点射
+function sfxShot(w) { // 战斗开火声（全合成零采样）：步兵=刀刃挥砍＋相击（夜批二改：唰＋锵，弃电子叮咚泛音）/火箭=呼啸发射/轻坦=炮响/重坦=重炮/机枪塔=连发点射
   try { if (isMuted() || !audioCtx()) return; const t = AC.currentTime, jit = 0.92 + Math.random() * 0.16;
     const noise = (dur, type, f0, f1, vol) => { const src = AC.createBufferSource(); src.buffer = noiseBuf(); src.playbackRate.value = jit; const fl = AC.createBiquadFilter(); fl.type = type; fl.frequency.setValueAtTime(f0, t); if (f1) fl.frequency.exponentialRampToValueAtTime(f1, t + dur); const g = AC.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); src.connect(fl); fl.connect(g); g.connect(AC.destination); src.start(t); src.stop(t + dur + 0.02); };
     const thump = (f0, f1, dur, vol) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f0 * jit, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur + 0.02); };
     const ping = (f0, dur, vol) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f0 * jit, t); o.frequency.exponentialRampToValueAtTime(f0 * 0.82 * jit, t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur + 0.02); }; // 金属泛音：起始高频、收尾略降，模拟刃口互击的衰减
-    if (w === 'inf') { noise(0.05, 'highpass', 2400, null, 0.075); ping(2137, 0.075, 0.055); ping(2963, 0.055, 0.038); ping(4211, 0.04, 0.022); } // 刀枪相撞：高频脆响打底＋三阶不谐泛音叮当
+    if (w === 'inf') { noise(0.07, 'bandpass', 1600, 480, 0.08); noise(0.03, 'highpass', 2000, null, 0.055); thump(540, 210, 0.055, 0.05); ping(1568, 0.04, 0.02); } // 刀刃挥砍＋相击：唰声（带通噪声下扫）＋锵的脆响＋刃身闷响＋一层压低的短余响（首版三阶纯正弦泛音像电子叮咚、主人报「很奇怪」，已弃）
     else if (w === 'tower') noise(0.05, 'bandpass', 2300, 1200, 0.04);
     else if (w === 'rocket') noise(0.2, 'bandpass', 500, 2600, 0.06);
     else if (w === 'ltank') { thump(160, 55, 0.13, 0.10); noise(0.09, 'lowpass', 900, 300, 0.05); }
