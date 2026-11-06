@@ -62,7 +62,7 @@
   canvas#minimap { position:absolute; right:4px; top:8px; width:26px; height:170px; background:rgba(0,0,0,.45); border:2px solid #4a545f; outline:1px solid rgba(190,215,240,.28); box-shadow:0 0 0 2px #14171b, 0 2px 7px rgba(0,0,0,.55); z-index:4; }
   #fps { position:absolute; left:6px; top:6px; font-size:10px; color:#9f9; text-shadow:0 0 2px #000; z-index:4; }
   /* 底部控制台：深灰金属＋阵营蓝点缀 */
-  #ctrl { background:linear-gradient(#2a2e33,#1d2024); padding:6px; border-top:3px solid #59636d; box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 0 1px rgba(0,0,0,.35); position:relative; }
+  #ctrl { background:linear-gradient(#2a2e33,#1d2024); padding:6px; border-top:3px solid #59636d; box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 0 1px rgba(0,0,0,.35); position:relative; flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
   .btnrow { display:flex; gap:5px; margin-bottom:5px; flex-wrap:wrap; }
   .btnrow:last-child { margin-bottom:0; }
   #ctrl button { flex:1; min-width:0; background:linear-gradient(#3a4046,#2c3136); color:#e8ebee; border:1px solid #59636d; border-radius:5px; padding:8px 2px; font-size:12px; line-height:1.25; cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:none; box-shadow:inset 0 1px 0 rgba(255,255,255,.08); }
@@ -244,10 +244,10 @@
       <button data-squad="armor"><img class="sqico" src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2024%27%20fill%3D%27none%27%20stroke%3D%27%23cfe3f5%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M13%2010V6.5h7V10%27%2F%3E%3Cpath%20d%3D%27M20%208h7%27%2F%3E%3Cpath%20d%3D%27M3%2017.5%205%2011h22l2%206.5%27%2F%3E%3Cpath%20d%3D%27M3%2020.5h26%27%2F%3E%3Ccircle%20cx%3D%279.5%27%20cy%3D%2718%27%20r%3D%271.8%27%2F%3E%3Ccircle%20cx%3D%2716%27%20cy%3D%2718%27%20r%3D%271.8%27%2F%3E%3Ccircle%20cx%3D%2722.5%27%20cy%3D%2718%27%20r%3D%271.8%27%2F%3E%3C%2Fsvg%3E" alt=""><span>装甲队</span></button>
       <button id="rallyBtn"><img class="sqico" src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2024%27%20fill%3D%27none%27%20stroke%3D%27%23cfe3f5%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M10%2021.5v-19%27%2F%3E%3Cpath%20d%3D%27M10%204c4-2.2%207%201.8%2012%200v8c-5%201.8-8-2.2-12%200%27%2F%3E%3C%2Fsvg%3E" alt=""><span>集结点</span></button>
     </div>
-    <div class="btnrow"><div class="lbl">建造（点卡片 → 点地图空地）</div></div>
-    <div class="btnrow" id="buildRow"></div>
     <div class="btnrow"><div class="lbl">造兵（点按钮进队列，上限 5，自动派给对应工厂）</div></div>
     <div class="btnrow" id="prodRow"></div>
+    <div class="btnrow"><div class="lbl">建造（点卡片 → 点地图空地）</div></div>
+    <div class="btnrow" id="buildRow"></div>
     <div id="hazard"></div>
     <div id="platebar"><span>v1.1 首更 · 战役 8 关 ＋ 无尽防线 ＋ 每日挑战 ＋ 超级武器</span></div>
   </div>
@@ -828,9 +828,11 @@ function canPlace(state, type, side, gx, gy) {
   if (gx < 0 || gy < 0 || gx + c.size > DM.cols || gy + c.size > DM.rows) return false;
   const hq = hqOf(state, side); if (!hq) return false;
   const cx = gx + c.size / 2, cy = gy + c.size / 2;
-  if (Math.hypot(cx - hq.x, cy - hq.y) > CFG.buildRadius + c.size / 2) return false;
+  // M12 建造全图开放（主人 2026-11-06 定「都开放」）：战役/无尽/每日/对决进攻不再受 HQ 半径限制；仅布防模式保留北端锚定，防把塔砌到进攻方出生点
+  if (state.mode === 'defense' && Math.hypot(cx - hq.x, cy - hq.y) > CFG.buildRadius + c.size / 2) return false;
   const blocked = blockedGrid(state);
   for (let x = gx; x < gx + c.size; x++) for (let y = gy; y < gy + c.size; y++) if (blocked.has(key(x, y))) return false;
+  for (const stn of state.stations || []) for (let x = gx; x < gx + c.size; x++) for (let y = gy; y < gy + c.size; y++) if (Math.hypot(x + 0.5 - stn.cx, y + 0.5 - stn.cy) < 1.7) return false; // 增益站驻守圈不可压
   if (type === 'refinery' && refineryCount(state, side) >= CFG.buildings.refinery.maxOwn) return false;
   return true;
 }
@@ -1892,7 +1894,7 @@ $('wavebar').textContent = S.waveIdx < S.waves.length
 $('warn').style.display = (S.time - S.warnT < 2.5)? 'block': 'none';
 // UX-001：放置模式提示条
 $('placebar').style.display = placementType? 'flex': 'none';
-if (placementType) $('placetip').textContent = '🏗 正在放置：点地图绿色空地落位，红色为不可建造';
+if (placementType) $('placetip').textContent = '🏗 正在放置：全图空地可造（不能压建筑/岩石/增益站），点绿色处落位';
 // 超武按钮：充能环以百分比文字呈现，就绪高亮＋瞄准态
 const swb = $('swBtn');
 if (swb) { const pct = Math.floor(S.sw.charge / CFG.superweapon.chargeTime * 100); swb.disabled = controlsLocked || !S.sw.ready; swb.classList.toggle('ready', S.sw.ready); swb.classList.toggle('on', swTargeting);
@@ -1924,7 +1926,7 @@ if (S && S.mode === 'level' && S.levelIdx === 0 && !SAVE.tutorial[step]) { SAVE.
 // ===== M10 新手引导运行时（仅 L1、仅首次；与旧 tutbar 同一条字幕条＝同一套引导，旧三步标记在引导收尾时一并置位）=====
 // 形态：舞台底部半透明字幕条（#tutbar）＋当前目标控件呼吸高亮（.tut-hi）＋箭头（#tutArrow）；每步只认真实动作完成才推进，不靠点击翻页。
 const GUIDE_TEXT = {
-  power: '👋 我是你的副官，咱们一步步来。先点下方建造卡「电厂」，再点基地旁的空地放下——所有建筑都要用电',
+  power: '👋 我是你的副官，咱们一步步来。先点下方建造卡「电厂」，再点地图上任意空地放下（全图可造，别压着建筑、岩石和增益站就行）——所有建筑都要用电',
   refinery: '💰 家守住了，再扩经济：建第二座「精炼厂」（750 金）放基地旁，每 5 秒自动采矿。出兵打仗全靠钱，扩张前家里留一队人守着',
   barracks: '🏯 点建造卡「兵营」放基地旁——出兵的家。两座兵营能同时出兵，成军快一倍',
   infantry: '🪖 点生产区的「步兵」卡造兵（100 金/名，点 3 次排队造 3 名）。记搭配：步兵便宜成群、火箭兵（200 金）专克坦克、坦克皮厚顶前面——有兵才守得住家',
@@ -1965,7 +1967,7 @@ function showGuideStep(step, sel) {
     ar.style.left = sx + 'px'; ar.style.top = (sy - 24) + 'px'; ar.style.display = 'block'; return;
   }
   const target = sel ? document.querySelector(sel) : null;
-  if (guideHiEl !== target) { clearGuideHi(); if (target) { target.classList.add('tut-hi'); guideHiEl = target; } }
+  if (guideHiEl !== target) { clearGuideHi(); if (target) { target.classList.add('tut-hi'); guideHiEl = target; const ctrlEl = $('ctrl'); if (ctrlEl && ctrlEl.contains(target)) target.scrollIntoView({ block: 'nearest' }); } } // M12：引导目标在控制台折叠线以下时自动滚进可视区（矮屏机型造兵行曾被锁屏布局压死，主人实玩反馈）
   if (target) { const r = target.getBoundingClientRect(); ar.style.left = (r.left + r.width / 2) + 'px'; ar.style.top = (r.top - 23) + 'px'; ar.style.display = 'block'; }
   else ar.style.display = 'none';
 }
@@ -2060,6 +2062,7 @@ btn.addEventListener('pointerdown', e => { e.preventDefault(); fired = false; ti
 const cancel = () => { if (timer) clearTimeout(timer); timer = null;};
 btn.addEventListener('pointerup', () => { cancel(); if (!fired) selectSquad(btn.dataset.squad, false);});
 btn.addEventListener('pointerleave', cancel);
+btn.addEventListener('pointercancel', cancel); // M12：控制台内部滚动接管手势时取消长按计时，防误触编队长按
 btn.addEventListener('contextmenu', e => e.preventDefault());
 });
 $('rallyBtn').addEventListener('click', () => { if (!S) return; rallyMode =!rallyMode; $('rallyBtn').classList.toggle('on', rallyMode);});
