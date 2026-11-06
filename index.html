@@ -380,22 +380,22 @@ const CFG = {
       towers:[{gx:7,gy:5},{gx:4,gy:6}], towerHpMul:0.9, stations:[{cx:7.5,cy:13.5}], walls:'standard',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'rocket',x:7.5,y:6.8}],
       waves:[ {t:120, comp:{inf:4,rocket:1}, label:'第1波反扑'}, {t:235, comp:{inf:3,rocket:2,ltank:1}, label:'第2波反扑'}, {t:330, comp:{inf:4,rocket:3,ltank:1}, label:'第3波反扑'} ],
-      prodStart:170, prodEvery:50, prodCycle:['inf','rocket','ltank','inf','rocket'] },
+      prodStart:170, prodEvery:55, prodCycle:['inf','rocket','ltank','inf','rocket'] },
     { name:'隘口', startFunds:1050, preBarracks:false, parTime:480, eFactory:true,
       towers:[{gx:7,gy:5}], towerHpMul:1.0, stations:[{cx:7.5,cy:13.5}], walls:'chokepoint',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:7.5,y:6.8}],
-      waves:[ {t:130, comp:{inf:4,rocket:2}, label:'第1波反扑'}, {t:245, comp:{inf:3,rocket:2,ltank:1}, label:'第2波反扑'}, {t:350, comp:{inf:4,rocket:3,ltank:2}, label:'第3波反扑'} ],
-      prodStart:180, prodEvery:50, prodCycle:['rocket','inf','ltank','inf','rocket'] },
+      waves:[ {t:130, comp:{inf:4,rocket:2}, label:'第1波反扑'}, {t:245, comp:{inf:3,rocket:2,ltank:1}, label:'第2波反扑'}, {t:350, comp:{inf:4,rocket:3,ltank:1}, label:'第3波反扑'} ],
+      prodStart:180, prodEvery:58, prodCycle:['rocket','inf','ltank','inf','rocket'] },
     { name:'速攻营', startFunds:1050, preBarracks:false, parTime:510, eBarracks2:true, eFactory:true,
       towers:[{gx:7,gy:5}], towerHpMul:1.0, stations:[{cx:4.5,cy:13.5},{cx:11.5,cy:13.5}], walls:'fortified',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:6.5,y:6.8},{type:'rocket',x:8.5,y:6.8}],
-      waves:[ {t:110, comp:{inf:5,rocket:2}, label:'第1波反扑'}, {t:225, comp:{inf:4,rocket:3,ltank:1}, label:'第2波反扑'}, {t:330, comp:{inf:5,rocket:3,ltank:2}, label:'第3波反扑'} ],
-      prodStart:130, prodEvery:38, prodCycle:['inf','inf','rocket','ltank','inf','rocket'] },
+      waves:[ {t:110, comp:{inf:4,rocket:2}, label:'第1波反扑'}, {t:225, comp:{inf:4,rocket:3,ltank:1}, label:'第2波反扑'}, {t:330, comp:{inf:4,rocket:3,ltank:2}, label:'第3波反扑'} ],
+      prodStart:130, prodEvery:52, prodCycle:['inf','inf','rocket','ltank','inf','rocket'] },
     { name:'赤铁决战', startFunds:1150, preBarracks:false, parTime:540, eRef2:true, eFactory:true,
       towers:[{gx:7,gy:5},{gx:4,gy:6}], towerHpMul:0.9, stations:[{cx:4.5,cy:13.5},{cx:11.5,cy:13.5}], walls:'standard',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:6.5,y:6.8},{type:'rocket',x:8.5,y:6.8}],
       waves:[ {t:140, comp:{inf:4,rocket:2}, label:'第1波反扑'}, {t:245, comp:{inf:4,rocket:3,ltank:1}, label:'第2波反扑'}, {t:370, comp:{inf:5,rocket:4,ltank:1,htank:1}, label:'第3波反扑'}, {t:470, comp:{inf:5,rocket:4,ltank:2,htank:1}, label:'决战总攻'} ],
-      prodStart:190, prodEvery:64, prodCycle:['inf','rocket','ltank','rocket','htank','inf'] }, // M4 校准 CAL-005（三轮）：塔系数 1.0→0.9、第3波轻坦 2→1、第2波轻坦 2→1、第1波步兵 5→4、波次整体后移 10–20s、持续出兵 45→64s 且起始 170→210s（双 bot 皆败且 HQ 被推平，见 BUG_LOG）
+      prodStart:190, prodEvery:70, prodCycle:['inf','rocket','ltank','rocket','htank','inf'] }, // M4 校准 CAL-005（三轮）：塔系数 1.0→0.9、第3波轻坦 2→1、第2波轻坦 2→1、第1波步兵 5→4、波次整体后移 10–20s、持续出兵 45→64s 且起始 170→210s（双 bot 皆败且 HQ 被推平，见 BUG_LOG）
   ],
 };
 
@@ -603,7 +603,7 @@ function skeletonState(mode) {
            ecoP: createEconomy(0), ecoE: createEconomy(9999),
            buildings: [], units: [], selection: [], camY: 0, introT: 0,
            stations: [], obstacles: buildObstacles('standard'),
-           waves: [], waveIdx: 0, enemyProdT: 0, enemyProdIdx: 0, enemyPending: [], fx: [], fxTexts: [], fxRings: [], fxBooms: [], harvesters: [], shakeT: 0, warnT: -99, firstShotT: null,
+           waves: [], waveIdx: 0, enemyProdT: 0, enemyProdIdx: 0, enemyPending: [], fx: [], fxTexts: [], fxRings: [], fxBooms: [], sndQ: [], harvesters: [], shakeT: 0, warnT: -99, firstShotT: null,
            outpost: [], rally: { x: 7.5, y: 19.5 }, variant: 0, waveRoute: 'hq',
            adStartUsed: false, reviveUsed: false, reviveOffer: false,
            adPause: false, airdropUsed: false, rushUsed: 0, swAdUsed: false, intelUsed: false,
@@ -999,7 +999,9 @@ function moveAlong(state, u, tx, ty, dt) {
 }
 // M5 特效分发：按武器类型生成 fx（kind 字段驱动渲染与抵达爆炸；纯视觉层，不改伤害/数值口径）
 // 步兵=tracer 曳光＋spark 命中火花；火箭兵=rocket 实体飞行；轻/重坦=flash 炮口焰＋shell 炮弹（big/scale 区分规模）
+// M12 战斗音效：开火同时往 state.sndQ 记武器键，UI 层排空并限流发声（引擎只记账不发声，node 模拟不受影响）
 function fireFx(state, u, t) {
+  if (state.sndQ && state.sndQ.length < 32) state.sndQ.push(u.type);
   const sx = u.x, sy = u.y, tx = t.x, ty = t.y, d = Math.max(0.5, Math.hypot(tx - sx, ty - sy));
   if (u.type === 'inf') {
     state.fx.push({ kind: 'tracer', x1: sx, y1: sy, x2: tx, y2: ty, t: 0, max: 0.06, side: u.side });
@@ -1063,7 +1065,7 @@ function updateTowers(state, dt) {
     if (b.type !== 'tower' || b.hp <= 0 || b.building) continue;
     let best = null, bd = CFG.buildings.tower.range + 0.5;
     for (const e of state.units) { if (e.side === b.side || e.hp <= 0) continue; const d = Math.hypot(e.x - b.x, e.y - b.y); if (d < bd) { bd = d; best = e; } }
-    if (best) { best.hp -= CFG.buildings.tower.dps * (b.dpsMul || 1) * dt; best.lastAttackerId = b.id; if (state.firstShotT === null) state.firstShotT = state.time; state.fx.push({ kind: 'tracer', x1: b.x, y1: b.y, x2: best.x, y2: best.y, t: 0, max: 0.05, side: b.side }); }
+    if (best) { best.hp -= CFG.buildings.tower.dps * (b.dpsMul || 1) * dt; best.lastAttackerId = b.id; if (state.firstShotT === null) state.firstShotT = state.time; state.fx.push({ kind: 'tracer', x1: b.x, y1: b.y, x2: best.x, y2: best.y, t: 0, max: 0.05, side: b.side }); b.sndT = (b.sndT || 0) - dt; if (b.sndT <= 0) { b.sndT = 0.25; if (state.sndQ && state.sndQ.length < 32) state.sndQ.push('tower'); } }
   }
 }
 
@@ -1264,7 +1266,7 @@ function tutStep(tutorial) {
 }
 // M10 新手引导步骤链（纯函数，输入运行时快照、与 DOM 解耦供 test_logic 直测）：按序返回第一个未完成步，全完成返回 'done'。
 // L1 开局已预置电厂/精炼/兵营各一座（冻结设计），三步的动作口径＝各「再补建一座」；快照里的 new* 指本局是否已新放置对应建筑。
-const GUIDE_ORDER = ['power', 'barracks', 'infantry', 'squad', 'move', 'attack', 'refinery', 'boost']; // M12 重排：先出兵保家再扩经济（旧序第 2 步逼等钱建精炼厂、新手被反扑拆家，主人 2026-11-06 实玩反馈）
+const GUIDE_ORDER = ['power', 'barracks', 'infantry', 'squad', 'move', 'attack', 'refinery', 'boost', 'factory', 'tower']; // M12 重排＋建筑介绍两步（点卡即过，不逼真造）：先出兵保家再扩经济（旧序第 2 步逼等钱建精炼厂、新手被反扑拆家，主人 2026-11-06 实玩反馈）
 function guideStepOf(snap) {
   const s = snap || {};
   if (!s.newPower) return 'power';
@@ -1275,6 +1277,8 @@ function guideStepOf(snap) {
   if (!(s.attackOrdered && s.firstKill)) return 'attack';
   if (!s.newRefinery) return 'refinery';
   if (s.hasStation && !s.stationOwned) return 'boost';
+  if (!s.sawFactory) return 'factory';
+  if (!s.sawTower) return 'tower';
   return 'done';
 }
 
@@ -1928,7 +1932,7 @@ if (S && S.mode === 'level' && S.levelIdx === 0 && !SAVE.tutorial[step]) { SAVE.
 // ===== M10 新手引导运行时（仅 L1、仅首次；与旧 tutbar 同一条字幕条＝同一套引导，旧三步标记在引导收尾时一并置位）=====
 // 形态：舞台底部半透明字幕条（#tutbar）＋当前目标控件呼吸高亮（.tut-hi）＋箭头（#tutArrow）；每步只认真实动作完成才推进，不靠点击翻页。
 const GUIDE_TEXT = {
-  power: '👋 我是你的副官，咱们一步步来。先点下方建造卡「电厂」，再点地图上任意空地放下（全图可造，别压着建筑、岩石和增益站就行）——所有建筑都要用电',
+  power: '👋 我是你的副官，咱们一步步来。先认识「电厂」：它管全军的电，所有建筑都耗电；电不够时，出兵、建造、赚钱全都会变慢。所以先点下方建造卡「电厂」，再点地图上任意空地放下（全图可造，别压着建筑、岩石和增益站就行）',
   refinery: '💰 家守住了，再扩经济：建第二座「精炼厂」（750 金）放基地旁，每 5 秒自动采矿。出兵打仗全靠钱，扩张前家里留一队人守着',
   barracks: '🏯 点建造卡「兵营」放基地旁——出兵的家。两座兵营能同时出兵，成军快一倍',
   infantry: '🪖 点生产区的「步兵」卡造兵（100 金/名，点 3 次排队造 3 名）。记搭配：步兵便宜成群、火箭兵（200 金）专克坦克、坦克皮厚顶前面——有兵才守得住家',
@@ -1936,18 +1940,20 @@ const GUIDE_TEXT = {
   move: '👆 选中部队后，点地图空地＝移动过去（路上不还手）；点「集结点」再点地图，新造的兵出厂自动去那报到。拖动地图、或拖右侧小地图竖条能看更远',
   attack: '⚔ 双击空地＝攻击前进（路上遇敌自动开火）；直接点某个敌兵/敌建筑＝集火先打它。带队推掉北边的前哨守军！',
   boost: '✦ 地图中央有座增益站：派士兵站进圈里 4 秒就能占领，占了精炼收入 +30%（拖动地图可以找它）',
+  factory: '🏭 认识一下「战车厂」（600 金）：造坦克的地方。轻型坦克皮厚火力猛、重型坦克是攻坚锤——步兵海冲不动的防线，靠坦克顶在前面。点一下它的卡认识认识（不用真造）',
+  tower: '🗼 最后是「机枪塔」（350 金）：不用人管，自动打靠近的敌人。守家、守增益站都好使；家里兵少时先立一座塔，比硬撑强得多。点一下它的卡看看',
   done: '🎉 教学完成！记住节奏：先出兵保家→带队推进→再扩经济赚钱。剩下的战场交给你了，指挥官',
 };
-const GUIDE_TARGET = { power: '#buildRow button[data-build="power"]', refinery: '#buildRow button[data-build="refinery"]', barracks: '#buildRow button[data-build="barracks"]', infantry: '#prodRow button[data-unit="inf"]', squad: '#squads button[data-squad="all"]', move: '#cv', attack: '#cv', boost: 'station', done: null };
+const GUIDE_TARGET = { power: '#buildRow button[data-build="power"]', refinery: '#buildRow button[data-build="refinery"]', barracks: '#buildRow button[data-build="barracks"]', factory: '#buildRow button[data-build="factory"]', tower: '#buildRow button[data-build="tower"]', infantry: '#prodRow button[data-unit="inf"]', squad: '#squads button[data-squad="all"]', move: '#cv', attack: '#cv', boost: 'station', done: null };
 let guideRt = null, guideHiEl = null;
-function guideReset() { guideRt = { base: null, squadAll: false, moved: false, attackOrdered: false, finishAt: 0, shown: '' }; }
+function guideReset() { guideRt = { base: null, squadAll: false, moved: false, attackOrdered: false, sawFactory: false, sawTower: false, finishAt: 0, shown: '' }; }
 function guideActive() { return !!(S && !S.over && S.mode === 'level' && S.levelIdx === 0 && typeof SAVE !== 'undefined' && SAVE && !SAVE.tutDone); }
 function guideCountB(t) { return S.buildings.filter(b => b.side === 'P' && b.type === t).length; }
 function guideSnapshot() {
   if (!guideRt) guideReset();
   if (!guideRt.base) guideRt.base = { power: guideCountB('power'), refinery: guideCountB('refinery'), barracks: guideCountB('barracks') };
   return { newPower: guideCountB('power') > guideRt.base.power, newRefinery: guideCountB('refinery') > guideRt.base.refinery, newBarracks: guideCountB('barracks') > guideRt.base.barracks, hasBarracks: guideCountB('barracks') > 0,
-    producedInf: S.producedInf || 0, squadAll: guideRt.squadAll, moved: guideRt.moved, attackOrdered: guideRt.attackOrdered,
+    producedInf: S.producedInf || 0, squadAll: guideRt.squadAll, moved: guideRt.moved, attackOrdered: guideRt.attackOrdered, sawFactory: guideRt.sawFactory, sawTower: guideRt.sawTower,
     firstKill: (S.kills || 0) > 0, hasStation: S.stations.length > 0, stationOwned: S.stations.some(s => s.owner === 'P') };
 }
 function clearGuideHi() { if (guideHiEl) { guideHiEl.classList.remove('tut-hi'); guideHiEl = null; } }
@@ -2076,7 +2082,7 @@ const c = CFG.buildings[t], b = document.createElement('button');
 b.dataset.build = t;
 if (BLDIMG[t]) { const im = document.createElement('img'); im.className = 'bldimg'; im.src = BLDIMG[t]; im.alt = ''; b.appendChild(im); }
 b.appendChild(el('span', 'bname', c.name)); b.appendChild(el('small', null, c.cost + '金'));
-b.addEventListener('click', () => { if (!S) return; placementType = placementType === t? null: t; document.querySelectorAll('#buildRow button').forEach(x => x.classList.toggle('on', x === b && placementType === t));});
+b.addEventListener('click', () => { if (!S) return; if (guideActive()) { if (!guideRt) guideReset(); if (t === 'factory') guideRt.sawFactory = true; if (t === 'tower') guideRt.sawTower = true; } placementType = placementType === t? null: t; document.querySelectorAll('#buildRow button').forEach(x => x.classList.toggle('on', x === b && placementType === t));});
 buildRow.appendChild(b);
 }
 const UICON = { inf: 'data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2024%27%20fill%3D%27none%27%20stroke%3D%27%23cfe3f5%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M7%2015a9%208%200%200%201%2018%200%27%2F%3E%3Cpath%20d%3D%27M4%2015.5h24%27%2F%3E%3Cpath%20d%3D%27M5%2019h22%27%2F%3E%3Cpath%20d%3D%27M16%207V4.5%27%2F%3E%3C%2Fsvg%3E', rocket: 'data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2024%27%20fill%3D%27none%27%20stroke%3D%27%23cfe3f5%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M16%202.5c2.6%202.6%203.6%206.2%203.6%2010l-3.6%201.8-3.6-1.8c0-3.8%201-7.4%203.6-10z%27%2F%3E%3Cpath%20d%3D%27M12.4%2013.5%209%2019l3.6-1.2%27%2F%3E%3Cpath%20d%3D%27M19.6%2013.5%2023%2019l-3.6-1.2%27%2F%3E%3Cpath%20d%3D%27M14.2%2020.5c.6%201.3%203%201.3%203.6%200%27%2F%3E%3Ccircle%20cx%3D%2716%27%20cy%3D%279%27%20r%3D%271.6%27%2F%3E%3C%2Fsvg%3E', ltank: 'data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2024%27%20fill%3D%27none%27%20stroke%3D%27%23cfe3f5%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M20%209h10%27%2F%3E%3Cpath%20d%3D%27M12%2012V9h8v3%27%2F%3E%3Cpath%20d%3D%27M5%2017l2-4.5h18L27%2017%27%2F%3E%3Cpath%20d%3D%27M4%2020.5h24%27%2F%3E%3Ccircle%20cx%3D%279.5%27%20cy%3D%2718%27%20r%3D%271.7%27%2F%3E%3Ccircle%20cx%3D%2716%27%20cy%3D%2718%27%20r%3D%271.7%27%2F%3E%3Ccircle%20cx%3D%2722.5%27%20cy%3D%2718%27%20r%3D%271.7%27%2F%3E%3C%2Fsvg%3E', htank: 'data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2032%2024%27%20fill%3D%27none%27%20stroke%3D%27%23cfe3f5%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M19%207.5h11%27%2F%3E%3Cpath%20d%3D%27M19%2011h11%27%2F%3E%3Cpath%20d%3D%27M11%2013V8.5h8V13%27%2F%3E%3Cpath%20d%3D%27M3.5%2018l2-5h21l2%205%27%2F%3E%3Cpath%20d%3D%27M3%2021h26%27%2F%3E%3Ccircle%20cx%3D%279%27%20cy%3D%2718.5%27%20r%3D%271.8%27%2F%3E%3Ccircle%20cx%3D%2716%27%20cy%3D%2718.5%27%20r%3D%271.8%27%2F%3E%3Ccircle%20cx%3D%2723%27%20cy%3D%2718.5%27%20r%3D%271.8%27%2F%3E%3C%2Fsvg%3E' }; // M6：造兵卡兵种剪影（内联 SVG data URI）
@@ -2485,6 +2491,17 @@ function sfxWhistle() { // 导弹来袭呼啸：高音滑降（与 0.8s 预警�
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.045, t + 0.12); g.gain.setValueAtTime(0.045, t + 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
       o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + 0.82); }
   } catch (e) {} }
+const sndLast = {}; // 武器音效限流时间戳（UI 侧）
+function sfxShot(w) { // 战斗开火声（全合成零采样）：步兵=短促枪声/火箭=呼啸发射/轻坦=炮响/重坦=重炮/机枪塔=连发点射
+  try { if (isMuted() || !audioCtx()) return; const t = AC.currentTime, jit = 0.92 + Math.random() * 0.16;
+    const noise = (dur, type, f0, f1, vol) => { const src = AC.createBufferSource(); src.buffer = noiseBuf(); src.playbackRate.value = jit; const fl = AC.createBiquadFilter(); fl.type = type; fl.frequency.setValueAtTime(f0, t); if (f1) fl.frequency.exponentialRampToValueAtTime(f1, t + dur); const g = AC.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); src.connect(fl); fl.connect(g); g.connect(AC.destination); src.start(t); src.stop(t + dur + 0.02); };
+    const thump = (f0, f1, dur, vol) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f0 * jit, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur + 0.02); };
+    if (w === 'inf') noise(0.07, 'bandpass', 1700, 900, 0.055);
+    else if (w === 'tower') noise(0.05, 'bandpass', 2300, 1200, 0.04);
+    else if (w === 'rocket') noise(0.2, 'bandpass', 500, 2600, 0.06);
+    else if (w === 'ltank') { thump(160, 55, 0.13, 0.10); noise(0.09, 'lowpass', 900, 300, 0.05); }
+    else if (w === 'htank') { thump(110, 38, 0.22, 0.14); noise(0.16, 'lowpass', 700, 200, 0.07); }
+  } catch (e) {} }
 function sfxBoom() { // 落弹爆轰：低频轰隆＋噪声洗＋爆裂脆响三层
   try { if (isMuted() || !audioCtx()) return; const t = AC.currentTime;
     const o = AC.createOscillator(), og = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(118, t); o.frequency.exponentialRampToValueAtTime(27, t + 0.55);
@@ -2764,6 +2781,8 @@ else { $('revivebar').style.display = 'flex'; if (!reviveSettleTried) { reviveSe
 } else { $('revivebar').style.display = 'none'; reviveSettleTried = false; }
 // 占领音效：任一增益站归属翻为己方时播合成确认音（UI 侧只读检测，不写状态）
 S.stations.forEach((stn, i) => { if (stationOwnersPrev[i] !== 'P' && stn.owner === 'P') sfx('capture'); stationOwnersPrev[i] = stn.owner; });
+// M12 战斗音效（UI 侧排空引擎 sndQ）：按武器限流发声——同类 80ms 内只响一次、每帧最多 4 声，音量压低不吵
+if (S.sndQ && S.sndQ.length) { const q = S.sndQ.splice(0, S.sndQ.length); const now = performance.now(); let played = 0; for (const w of q) { if (played >= 4) break; if (now - (sndLast[w] || 0) < 80) continue; sndLast[w] = now; sfxShot(w); played++; } }
 // M12 超武音效（UI 侧只读检测）：新预警→呼啸；预警消失（＝落弹）→爆轰（状态对象换新局时重置集合，防误触）
 if (S !== swPrevState) { swPrevState = S; swPrevPend = new Set(); }
 { const cur = new Set(S.swPending || []); for (const p of cur) if (!swPrevPend.has(p)) sfxWhistle(); for (const p of swPrevPend) if (!cur.has(p)) sfxBoom(); swPrevPend = cur; }
