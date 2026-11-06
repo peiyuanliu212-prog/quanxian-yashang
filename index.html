@@ -311,6 +311,7 @@ const CFG = {
   sight: 4.5,                                // 索敌视野（格）
   roadSpeedMul: 1.2,                         // 路面加速
   lowPowerMul: 0.5,                          // 低电：生产/建造/精炼收入系数
+  duelIncomeMul: 2 / 3,                      // M12 节奏批：对决进攻方精炼收入系数——战役收入 32→48 提速后，对决按此系数回到旧口径（48×2/3=32），守住对决公平带（模拟总胜率）
   loot: 150,                                 // 拆敌建筑奖励
   hqRepair: 2,                               // HQ 自修 /s
   boostRadius: 2.2,                          // 增益站半径（格）
@@ -319,13 +320,13 @@ const CFG = {
   buildings: {
     hq:      { name:'指挥中心', short:'指', cost:0,   hp:2000, power:50,   buildTime:0,  size:3, dps:0,  range:0 },
     power:   { name:'电厂',     short:'电', cost:300, hp:600,  power:100,  buildTime:5,  size:2, dps:0,  range:0 },
-    refinery:{ name:'精炼厂',   short:'精', cost:500, cost2:750, hp:800, power:-20, buildTime:8, size:2, dps:0, range:0, income:32, incomeEvery:5, maxOwn:2 },
+    refinery:{ name:'精炼厂',   short:'精', cost:500, cost2:750, hp:800, power:-20, buildTime:8, size:2, dps:0, range:0, income:48, incomeEvery:5, maxOwn:2 },
     barracks:{ name:'兵营',     short:'兵', cost:400, hp:700,  power:-20,  buildTime:8,  size:2, dps:0,  range:0 },
     factory: { name:'战车厂',   short:'车', cost:600, hp:900,  power:-30,  buildTime:10, size:2, dps:0,  range:0 },
     tower:   { name:'机枪塔',   short:'塔', cost:350, hp:500,  power:-10,  buildTime:6,  size:1, dps:18, range:4 },
   },
   units: {
-    inf:    { name:'步兵',     short:'步', cost:100, hp:120, dps:10, range:2, buildTime:3,  speed:2.2, from:'barracks', cls:'inf',    squad:'inf' },
+    inf:    { name:'步兵',     short:'步', cost:100, hp:120, dps:10, range:1.3, buildTime:3,  speed:2.35, from:'barracks', cls:'inf',    squad:'inf' },
     rocket: { name:'火箭兵',   short:'火', cost:200, hp:140, dps:14, range:3, buildTime:5,  speed:2.0, from:'barracks', cls:'inf',    squad:'rocket' },
     ltank:  { name:'轻型坦克', short:'坦', cost:400, hp:450, dps:22, range:3, buildTime:8,  speed:1.8, from:'factory',  cls:'armor',  squad:'armor' },
     htank:  { name:'重型坦克', short:'重', cost:700, hp:900, dps:35, range:3, buildTime:12, speed:1.3, from:'factory',  cls:'armor',  squad:'armor' },
@@ -355,46 +356,46 @@ const CFG = {
   ] },
   // 关卡表（差异只在此处；缺省敌布局：HQ(5,0) 电厂(2,0) 精炼(10,0) 兵营(9,3)，塔位见 towers）
   levels: [
-    { name:'全线压上', startFunds:600, preBarracks:true,  parTime:360,
+    { name:'全线压上', startFunds:900, preBarracks:true,  parTime:360,
       towers:[{gx:7,gy:5}], towerHpMul:0.7, stations:[{cx:7.5,cy:13.5}], walls:'standard',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5}],
-      waves:[ {t:85, comp:{inf:3}, label:'第1波反扑'}, {t:200, comp:{inf:3,rocket:2}, label:'第2波反扑'} ],
-      prodStart:190, prodEvery:60, prodCycle:['inf','inf','rocket','inf','ltank'] },
-    { name:'双炉并进', startFunds:700, preBarracks:false, parTime:420, eRef2:true,
+      waves:[ {t:65, comp:{inf:3}, label:'第1波反扑'}, {t:185, comp:{inf:3,rocket:2}, label:'第2波反扑'} ],
+      prodStart:170, prodEvery:60, prodCycle:['inf','inf','rocket','inf','ltank'] },
+    { name:'双炉并进', startFunds:850, preBarracks:false, parTime:420, eRef2:true,
       towers:[{gx:7,gy:5}], towerHpMul:0.85, stations:[{cx:7.5,cy:13.5}], walls:'standard',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:7.5,y:6.8}],
-      waves:[ {t:120, comp:{inf:4}, label:'第1波反扑'}, {t:210, comp:{inf:3,rocket:2}, label:'第2波反扑'}, {t:300, comp:{inf:4,rocket:2}, label:'第3波反扑'} ],
-      prodStart:170, prodEvery:50, prodCycle:['inf','rocket','inf','inf','rocket'] },
-    { name:'双站之争', startFunds:700, preBarracks:false, parTime:420,
+      waves:[ {t:100, comp:{inf:4}, label:'第1波反扑'}, {t:195, comp:{inf:3,rocket:2}, label:'第2波反扑'}, {t:290, comp:{inf:4,rocket:2}, label:'第3波反扑'} ],
+      prodStart:150, prodEvery:50, prodCycle:['inf','rocket','inf','inf','rocket'] },
+    { name:'双站之争', startFunds:850, preBarracks:false, parTime:420,
       towers:[{gx:7,gy:5}], towerHpMul:0.85, stations:[{cx:4.5,cy:13.5},{cx:11.5,cy:13.5}], walls:'standard',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'rocket',x:7.5,y:6.8}],
-      waves:[ {t:130, comp:{inf:4}, label:'第1波反扑'}, {t:230, comp:{inf:3,rocket:3}, label:'第2波反扑'}, {t:320, comp:{inf:4,rocket:2}, label:'第3波反扑'} ],
-      prodStart:180, prodEvery:55, prodCycle:['inf','inf','rocket','rocket','inf'] },
-    { name:'铁甲首秀', startFunds:800, preBarracks:false, parTime:450, eFactory:true,
+      waves:[ {t:110, comp:{inf:4}, label:'第1波反扑'}, {t:215, comp:{inf:3,rocket:3}, label:'第2波反扑'}, {t:310, comp:{inf:4,rocket:2}, label:'第3波反扑'} ],
+      prodStart:160, prodEvery:55, prodCycle:['inf','inf','rocket','rocket','inf'] },
+    { name:'铁甲首秀', startFunds:950, preBarracks:false, parTime:450, eFactory:true,
       towers:[{gx:7,gy:5}], towerHpMul:0.9, stations:[{cx:7.5,cy:13.5}], walls:'standard',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:7.5,y:6.8}],
-      waves:[ {t:140, comp:{inf:3,rocket:1}, label:'第1波反扑'}, {t:240, comp:{inf:3,rocket:2}, label:'第2波反扑'}, {t:330, comp:{inf:3,rocket:2,ltank:1}, label:'第3波反扑'} ],
-      prodStart:200, prodEvery:62, prodCycle:['inf','rocket','inf','ltank','inf','rocket'] }, // M4 校准 CAL-004：第2波撤轻坦（装甲首秀延至第3波）、持续出兵 55→62s（双 bot 皆败且 HQ 被推平，见 BUG_LOG）
-    { name:'双塔防线', startFunds:800, preBarracks:false, parTime:480, eFactory:true,
+      waves:[ {t:120, comp:{inf:3,rocket:1}, label:'第1波反扑'}, {t:225, comp:{inf:3,rocket:2}, label:'第2波反扑'}, {t:320, comp:{inf:3,rocket:2,ltank:1}, label:'第3波反扑'} ],
+      prodStart:180, prodEvery:62, prodCycle:['inf','rocket','inf','ltank','inf','rocket'] }, // M4 校准 CAL-004：第2波撤轻坦（装甲首秀延至第3波）、持续出兵 55→62s（双 bot 皆败且 HQ 被推平，见 BUG_LOG）
+    { name:'双塔防线', startFunds:950, preBarracks:false, parTime:480, eFactory:true,
       towers:[{gx:7,gy:5},{gx:4,gy:6}], towerHpMul:0.9, stations:[{cx:7.5,cy:13.5}], walls:'standard',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'rocket',x:7.5,y:6.8}],
-      waves:[ {t:140, comp:{inf:4,rocket:1}, label:'第1波反扑'}, {t:250, comp:{inf:3,rocket:2,ltank:1}, label:'第2波反扑'}, {t:340, comp:{inf:4,rocket:3,ltank:1}, label:'第3波反扑'} ],
-      prodStart:190, prodEvery:50, prodCycle:['inf','rocket','ltank','inf','rocket'] },
-    { name:'隘口', startFunds:900, preBarracks:false, parTime:480, eFactory:true,
+      waves:[ {t:120, comp:{inf:4,rocket:1}, label:'第1波反扑'}, {t:235, comp:{inf:3,rocket:2,ltank:1}, label:'第2波反扑'}, {t:330, comp:{inf:4,rocket:3,ltank:1}, label:'第3波反扑'} ],
+      prodStart:170, prodEvery:50, prodCycle:['inf','rocket','ltank','inf','rocket'] },
+    { name:'隘口', startFunds:1050, preBarracks:false, parTime:480, eFactory:true,
       towers:[{gx:7,gy:5}], towerHpMul:1.0, stations:[{cx:7.5,cy:13.5}], walls:'chokepoint',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:7.5,y:6.8}],
-      waves:[ {t:150, comp:{inf:4,rocket:2}, label:'第1波反扑'}, {t:260, comp:{inf:3,rocket:2,ltank:1}, label:'第2波反扑'}, {t:360, comp:{inf:4,rocket:3,ltank:2}, label:'第3波反扑'} ],
-      prodStart:200, prodEvery:50, prodCycle:['rocket','inf','ltank','inf','rocket'] },
-    { name:'速攻营', startFunds:900, preBarracks:false, parTime:510, eBarracks2:true, eFactory:true,
+      waves:[ {t:130, comp:{inf:4,rocket:2}, label:'第1波反扑'}, {t:245, comp:{inf:3,rocket:2,ltank:1}, label:'第2波反扑'}, {t:350, comp:{inf:4,rocket:3,ltank:2}, label:'第3波反扑'} ],
+      prodStart:180, prodEvery:50, prodCycle:['rocket','inf','ltank','inf','rocket'] },
+    { name:'速攻营', startFunds:1050, preBarracks:false, parTime:510, eBarracks2:true, eFactory:true,
       towers:[{gx:7,gy:5}], towerHpMul:1.0, stations:[{cx:4.5,cy:13.5},{cx:11.5,cy:13.5}], walls:'fortified',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:6.5,y:6.8},{type:'rocket',x:8.5,y:6.8}],
-      waves:[ {t:130, comp:{inf:5,rocket:2}, label:'第1波反扑'}, {t:240, comp:{inf:4,rocket:3,ltank:1}, label:'第2波反扑'}, {t:340, comp:{inf:5,rocket:3,ltank:2}, label:'第3波反扑'} ],
-      prodStart:150, prodEvery:38, prodCycle:['inf','inf','rocket','ltank','inf','rocket'] },
-    { name:'赤铁决战', startFunds:1000, preBarracks:false, parTime:540, eRef2:true, eFactory:true,
+      waves:[ {t:110, comp:{inf:5,rocket:2}, label:'第1波反扑'}, {t:225, comp:{inf:4,rocket:3,ltank:1}, label:'第2波反扑'}, {t:330, comp:{inf:5,rocket:3,ltank:2}, label:'第3波反扑'} ],
+      prodStart:130, prodEvery:38, prodCycle:['inf','inf','rocket','ltank','inf','rocket'] },
+    { name:'赤铁决战', startFunds:1150, preBarracks:false, parTime:540, eRef2:true, eFactory:true,
       towers:[{gx:7,gy:5},{gx:4,gy:6}], towerHpMul:0.9, stations:[{cx:4.5,cy:13.5},{cx:11.5,cy:13.5}], walls:'standard',
       outpost:[{type:'inf',x:7.0,y:7.5},{type:'inf',x:8.0,y:7.5},{type:'inf',x:6.5,y:6.8},{type:'rocket',x:8.5,y:6.8}],
-      waves:[ {t:160, comp:{inf:4,rocket:2}, label:'第1波反扑'}, {t:260, comp:{inf:4,rocket:3,ltank:1}, label:'第2波反扑'}, {t:380, comp:{inf:5,rocket:4,ltank:1,htank:1}, label:'第3波反扑'}, {t:480, comp:{inf:5,rocket:4,ltank:2,htank:1}, label:'决战总攻'} ],
-      prodStart:210, prodEvery:64, prodCycle:['inf','rocket','ltank','rocket','htank','inf'] }, // M4 校准 CAL-005（三轮）：塔系数 1.0→0.9、第3波轻坦 2→1、第2波轻坦 2→1、第1波步兵 5→4、波次整体后移 10–20s、持续出兵 45→64s 且起始 170→210s（双 bot 皆败且 HQ 被推平，见 BUG_LOG）
+      waves:[ {t:140, comp:{inf:4,rocket:2}, label:'第1波反扑'}, {t:245, comp:{inf:4,rocket:3,ltank:1}, label:'第2波反扑'}, {t:370, comp:{inf:5,rocket:4,ltank:1,htank:1}, label:'第3波反扑'}, {t:470, comp:{inf:5,rocket:4,ltank:2,htank:1}, label:'决战总攻'} ],
+      prodStart:190, prodEvery:64, prodCycle:['inf','rocket','ltank','rocket','htank','inf'] }, // M4 校准 CAL-005（三轮）：塔系数 1.0→0.9、第3波轻坦 2→1、第2波轻坦 2→1、第1波步兵 5→4、波次整体后移 10–20s、持续出兵 45→64s 且起始 170→210s（双 bot 皆败且 HQ 被推平，见 BUG_LOG）
   ],
 };
 
@@ -868,6 +869,7 @@ function updateBuildings(state, dt) {
         if (low) amt *= CFG.lowPowerMul;
         if (state.dailyIncomeMul && state.dailyIncomeMul !== 1) amt *= state.dailyIncomeMul; // 每日修饰「双倍精炼」（仅每日模式置 2）
         if (boostActive(state, 'P')) amt *= CFG.boostIncomeMul * (state.boostMul || 1); // 每日修饰「增益站×1.5」叠加 boostMul
+        if (state.mode === 'duel') amt *= CFG.duelIncomeMul; // 对决公平：进攻方收入回旧口径，见 CFG.duelIncomeMul
         amt = Math.round(amt);
         eco.earn(amt, 'refinery');
         state.fxTexts.push({ x: b.x, y: b.y - 0.6, text: '+' + amt, t: 0, max: 1.1 }); // 入账跳字（与账本同一事件，金额同源）
