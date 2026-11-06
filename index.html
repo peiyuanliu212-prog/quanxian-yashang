@@ -326,7 +326,7 @@ const CFG = {
     tower:   { name:'机枪塔',   short:'塔', cost:350, hp:500,  power:-10,  buildTime:6,  size:1, dps:18, range:4 },
   },
   units: {
-    inf:    { name:'步兵',     short:'步', cost:100, hp:120, dps:10, range:1.3, buildTime:3,  speed:2.35, from:'barracks', cls:'inf',    squad:'inf' },
+    inf:    { name:'步兵',     short:'步', cost:100, hp:120, dps:10, range:0.7, buildTime:3,  speed:2.35, from:'barracks', cls:'inf',    squad:'inf' }, // M12 夜批：主人定步兵改真近战（射程 0.7 贴身挥砍，原 1.3）
     rocket: { name:'火箭兵',   short:'火', cost:200, hp:140, dps:14, range:3, buildTime:5,  speed:2.0, from:'barracks', cls:'inf',    squad:'rocket' },
     ltank:  { name:'轻型坦克', short:'坦', cost:400, hp:450, dps:22, range:3, buildTime:8,  speed:1.8, from:'factory',  cls:'armor',  squad:'armor' },
     htank:  { name:'重型坦克', short:'重', cost:700, hp:900, dps:35, range:3, buildTime:12, speed:1.3, from:'factory',  cls:'armor',  squad:'armor' },
@@ -843,6 +843,27 @@ function placeBuilding(state, type, gx, gy) {
   if (!state.ecoP.spend(cost, 'build_' + type)) return false;
   mkBuilding(state, type, 'P', gx, gy, false); return true;
 }
+// M12 夜批：放置失败原因（与 canPlace 同口径，供 UI 点按反馈；此前点不下去全程静默，主人在布防圈外连点只得到「没法建设」）
+// 命中第一个原因即返回人话，全部通过返回 ''（此时只剩扣费失败的极小概率，UI 另给兜底文案）
+function placeFailReason(state, type, side, gx, gy) {
+  const c = CFG.buildings[type];
+  const DM = dimsOf(state);
+  if (gx < 0 || gy < 0 || gx + c.size > DM.cols || gy + c.size > DM.rows) return '超出地图了，往里挪一点';
+  const hq = hqOf(state, side); if (!hq) return '没有指挥中心，造不了';
+  const cx = gx + c.size / 2, cy = gy + c.size / 2;
+  if (state.mode === 'defense' && Math.hypot(cx - hq.x, cy - hq.y) > CFG.buildRadius + c.size / 2) return '布防只能在指挥中心周围绿圈内造，往北边挪';
+  if (type === 'refinery' && refineryCount(state, side) >= CFG.buildings.refinery.maxOwn) return '精炼厂最多造 ' + CFG.buildings.refinery.maxOwn + ' 座';
+  const obs = new Set(state && state.obstacles ? state.obstacles : OBSTACLES);
+  const cells = []; for (let x = gx; x < gx + c.size; x++) for (let y = gy; y < gy + c.size; y++) cells.push(key(x, y));
+  if (cells.some(k => obs.has(k))) return '有岩石挡着，换块空地';
+  const blocked = blockedGrid(state);
+  if (cells.some(k => blocked.has(k))) return '这里已经有建筑了，换个位置';
+  for (const stn of state.stations || []) for (let x = gx; x < gx + c.size; x++) for (let y = gy; y < gy + c.size; y++) if (Math.hypot(x + 0.5 - stn.cx, y + 0.5 - stn.cy) < 1.7) return '太贴近增益站了，挪开一格';
+  const eco = side === 'P' ? state.ecoP : state.ecoE;
+  const cost = buildingCost(state, type, side);
+  if (eco && eco.funds < cost) return '钱不够，还差 ' + Math.ceil(cost - eco.funds) + ' 金';
+  return '';
+}
 function queueUnit(state, type, side) {
   const from = CFG.units[type].from;
   const facs = state.buildings.filter(b => b.side === side && b.type === from && b.hp > 0 && !b.building);
@@ -960,7 +981,8 @@ function acquire(state, u) {
   if (u.order.type === 'focus') { const t = findById(state, u.order.targetId); if (t && t.hp > 0) return t; u.order = { type: 'attackmove', x: u.x, y: u.y }; }
   const rngU = CFG.units[u.type].range;
   const atk = foes.find(e => e.id === u.lastAttackerId);
-  if (atk && distTo(u, atk) <= rngU + 1.3) return atk;
+  const retBand = rngU + 1.3 + (rngU < 1 ? 0.6 : 0); // M12 夜批：近战兵（射程<1）还手带 +0.6——射程改 0.7 后原带宽够不着近身骚扰者；最大射程风筝（distTo≈3）仍不追，那是攻击前进的活
+  if (atk && distTo(u, atk) <= retBand) return atk;
   const engage = u.order.type === 'attackmove' || u.order.type === 'idle' || u.order.type === 'focus' || u.order.type === 'guard'; // M11：守军同口径索敌（追击半径在 updateUnits 按守点裁决）
   const R = engage ? CFG.sight : rngU + 1.6; // 纯移动：候选圈＝射程外 1.6 格（贴身范围），且只收「打我的人/已在交战的敌人」
   let best = null, bs = Infinity;
@@ -970,7 +992,7 @@ function acquire(state, u) {
     if (cur && cur.kind !== 'building' && cur.hp > 0 && cur.side !== u.side) { const dc = Math.hypot(cur.x - u.x, cur.y - u.y); if (dc <= R + 0.6 && foeScore(state, u, cur, dc) <= bs + 0.7) return cur; }
     return best;
   }
-  if (engage && atk && Math.hypot(atk.x - u.x, atk.y - u.y) <= CFG.sight + 1.5) return atk; // 视野内无其他目标：远追打我的人（如射程外火箭兵），不再站着挨打
+  if (atk && Math.hypot(atk.x - u.x, atk.y - u.y) <= CFG.sight + 1.5) return atk; // 视野内无其他目标：远追打我的人（如射程外火箭兵），不再站着挨打。M12 夜批：纯移动单位同享此条（近战化后近身带宽够不着骚扰者，0.2s 索敌间隔内 gap 已被自身移动拉开）；只限攻击者本人——路人仍不理，移动/攻击前进的区别保留
   if (engage) { // 建筑兜底：射程内或攻击前进时最近建筑
     let bb = null, bbd = u.order.type === 'attackmove' ? CFG.sight + 2 : CFG.units[u.type].range + 0.4;
     for (const b of state.buildings) { if (b.side === u.side || b.hp <= 0 || b.building) continue; const d = distTo(u, b); if (d < bbd) { bbd = d; bb = b; } }
@@ -982,9 +1004,12 @@ function acquire(state, u) {
 }
 function ensurePath(state, u, tx, ty) {
   u.pathT -= 1;
-  if (!u.path.length || u.pathT <= 0) {
-    u.path = findPath(state, Math.floor(u.x), Math.floor(u.y), Math.floor(tx), Math.floor(ty));
+  const gx = Math.floor(tx), gy = Math.floor(ty);
+  // M12 夜批修复：路径缓存此前不认目标——目标变更（改令/还手/回守点）后仍沿旧路径走完节流期（实测布防索敌场景里步兵朝反方向走满 3s 才回头）。目标格一变立即重算；同格内抖动不触发，移动目标约每跨一格重算一次，与原 0.66s 节流同量级
+  if (!u.path.length || u.pathT <= 0 || u.pathGoalX !== gx || u.pathGoalY !== gy) {
+    u.path = findPath(state, Math.floor(u.x), Math.floor(u.y), gx, gy);
     u.pathT = 40; // 帧，约 0.66s 重算一次
+    u.pathGoalX = gx; u.pathGoalY = gy;
   }
 }
 function moveAlong(state, u, tx, ty, dt) {
@@ -998,14 +1023,14 @@ function moveAlong(state, u, tx, ty, dt) {
   return d <= 0.3 && !u.path.length;
 }
 // M5 特效分发：按武器类型生成 fx（kind 字段驱动渲染与抵达爆炸；纯视觉层，不改伤害/数值口径）
-// 步兵=tracer 曳光＋spark 命中火花；火箭兵=rocket 实体飞行；轻/重坦=flash 炮口焰＋shell 炮弹（big/scale 区分规模）
+// 步兵=slash 挥砍弧光＋spark 命中火花（M12 夜批真近战化）；火箭兵=rocket 实体飞行；轻/重坦=flash 炮口焰＋shell 炮弹（big/scale 区分规模）
 // M12 战斗音效：开火同时往 state.sndQ 记武器键，UI 层排空并限流发声（引擎只记账不发声，node 模拟不受影响）
 function fireFx(state, u, t) {
   if (state.sndQ && state.sndQ.length < 32) state.sndQ.push(u.type);
   const sx = u.x, sy = u.y, tx = t.x, ty = t.y, d = Math.max(0.5, Math.hypot(tx - sx, ty - sy));
   if (u.type === 'inf') {
-    state.fx.push({ kind: 'tracer', x1: sx, y1: sy, x2: tx, y2: ty, t: 0, max: 0.06, side: u.side });
-    for (let i = 0; i < 3; i++) state.fx.push({ kind: 'spark', x: tx, y: ty, vx: (Math.random() - 0.5) * 2.4, vy: (Math.random() - 0.9) * 2.2, t: 0, max: 0.14, side: u.side });
+    state.fx.push({ kind: 'slash', x: tx, y: ty, ang: Math.atan2(ty - sy, tx - sx), t: 0, max: 0.13, side: u.side });
+    for (let i = 0; i < 2; i++) state.fx.push({ kind: 'spark', x: tx, y: ty, vx: (Math.random() - 0.5) * 2.4, vy: (Math.random() - 0.9) * 2.2, t: 0, max: 0.14, side: u.side });
   } else if (u.type === 'rocket') {
     state.fx.push({ kind: 'rocket', x0: sx, y0: sy, x1: sx, y1: sy, x2: tx, y2: ty, t: 0, dur: d / 13, side: u.side });
   } else {
@@ -1752,6 +1777,8 @@ if (typeof document !== 'undefined') {
     }
     // 集结点旗
     ctx.fillStyle = '#7dff8a'; ctx.fillRect(S.rally.x * CELL - 1, S.rally.y * CELL - 14, 2, 14); ctx.beginPath(); ctx.moveTo(S.rally.x * CELL + 1, S.rally.y * CELL - 14); ctx.lineTo(S.rally.x * CELL + 11, S.rally.y * CELL - 10); ctx.lineTo(S.rally.x * CELL + 1, S.rally.y * CELL - 6); ctx.fill();
+    // M12 夜批：布防建造圈可视化（此前圈外点按静默失败，主人报「布防没法建设」）：绿圈内才是可造区，放置模式下加亮＋虚线描边
+    if (S.mode === 'defense') { const hqD = hqOf(S, 'P'); if (hqD) { ctx.beginPath(); ctx.arc(hqD.x * CELL, hqD.y * CELL, (CFG.buildRadius + 0.5) * CELL, 0, Math.PI * 2); ctx.fillStyle = placementType ? 'rgba(96,224,140,0.13)' : 'rgba(96,224,140,0.06)'; ctx.fill(); if (placementType) { ctx.strokeStyle = 'rgba(140,255,175,0.85)'; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.stroke(); ctx.setLineDash([]); } } }
     // 放置预览
     if (placementType && hover) {
       const c = CFG.buildings[placementType], gx = Math.round(hover.x - c.size / 2), gy = Math.round(hover.y - c.size / 2);
@@ -1762,7 +1789,7 @@ if (typeof document !== 'undefined') {
       if (S.mode === 'duel' && b.side === 'E') { const v = foeBuildingVis(S, b); if (v === 'hidden') continue; if (v === 'ghost') { drawGhostBuilding(ctx, b); continue; } }
       drawBuilding(ctx, b);
     }
-    // M5 特效按 kind 分发渲染：火箭弹实体（烟轨＋尾焰）/炮弹亮点/炮口焰/命中火花/曳光线（步兵·机枪塔）
+    // M5 特效按 kind 分发渲染：火箭弹实体（烟轨＋尾焰）/炮弹亮点/炮口焰/命中火花/曳光线（机枪塔）/挥砍弧光（步兵近战，M12 夜批）
     for (const f of S.fx) {
       if (f.kind === 'rocket') {
         for (let i = 1; i <= 4; i++) { const bx = (f.x1 + (f.x0 - f.x1) * i * 0.16) * CELL, by = (f.y1 + (f.y0 - f.y1) * i * 0.16) * CELL; ctx.beginPath(); ctx.arc(bx, by, 3.8 - i * 0.6, 0, Math.PI * 2); ctx.fillStyle = 'rgba(150,150,150,' + (0.34 - i * 0.06).toFixed(2) + ')'; ctx.fill(); } // 灰烟轨迹
@@ -1783,6 +1810,12 @@ if (typeof document !== 'undefined') {
       } else if (f.kind === 'spark') {
         ctx.fillStyle = 'rgba(255,215,110,0.95)';
         ctx.fillRect((f.x + f.vx * f.t) * CELL - 1.2, (f.y + f.vy * f.t + 3.4 * f.t * f.t) * CELL - 1.2, 2.4, 2.4);
+      } else if (f.kind === 'slash') { // 步兵近战挥砍：一道弧光绕目标身位扫过，扫角随进度推进、整体渐隐
+        const p = Math.min(1, f.t / f.max), a0 = f.ang - 1.15 + p * 1.5;
+        ctx.strokeStyle = 'rgba(255,244,200,' + (0.95 * (1 - p * 0.55)).toFixed(2) + ')'; ctx.lineWidth = 2.6;
+        ctx.beginPath(); ctx.arc(f.x * CELL, f.y * CELL, 12, a0, a0 + 0.85); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,' + (0.85 * (1 - p * 0.55)).toFixed(2) + ')'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(f.x * CELL, f.y * CELL, 8.5, a0 + 0.1, a0 + 0.7); ctx.stroke();
       } else { // tracer：短促黄白曳光＋命中点
         ctx.strokeStyle = 'rgba(255,236,170,0.9)'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(f.x1 * CELL, f.y1 * CELL); ctx.lineTo(f.x2 * CELL, f.y2 * CELL); ctx.stroke();
         ctx.fillStyle = 'rgba(255,240,180,0.9)'; ctx.fillRect(f.x2 * CELL - 1.6, f.y2 * CELL - 1.6, 3.2, 3.2);
@@ -1900,7 +1933,7 @@ $('wavebar').textContent = S.waveIdx < S.waves.length
 $('warn').style.display = (S.time - S.warnT < 2.5)? 'block': 'none';
 // UX-001：放置模式提示条
 $('placebar').style.display = placementType? 'flex': 'none';
-if (placementType) $('placetip').textContent = '🏗 正在放置：全图空地可造（不能压建筑/岩石/增益站），点绿色处落位';
+if (placementType) $('placetip').textContent = S.mode === 'defense' ? '🏗 布防建造：只能在指挥中心周围绿圈内造，点绿色处落位' : '🏗 正在放置：全图空地可造（不能压建筑/岩石/增益站），点绿色处落位'; // M12 夜批：布防文案纠正（此前写「全图可造」误导布防玩家往圈外点）
 // 超武按钮：充能环以百分比文字呈现，就绪高亮＋瞄准态
 const swb = $('swBtn');
 if (swb) { const pct = Math.floor(S.sw.charge / CFG.superweapon.chargeTime * 100); swb.disabled = controlsLocked || !S.sw.ready; swb.classList.toggle('ready', S.sw.ready); swb.classList.toggle('on', swTargeting);
@@ -2003,6 +2036,7 @@ return;
 if (placementType) {
 const c = CFG.buildings[placementType], gx = Math.round(w.x - c.size / 2), gy = Math.round(w.y - c.size / 2);
 if (placeBuilding(S, placementType, gx, gy)) { cancelPlacement(); tutMark('build'); }
+else { const r = placeFailReason(S, placementType, 'P', gx, gy); toast(r || '这里放不下，换个位置'); } // M12 夜批：失败不再静默，给出具体原因且不退出放置模式，可直接挪位重试
 return;
 }
 if (rallyMode) { S.rally = { x: w.x, y: w.y}; rallyMode = false; $('rallyBtn').classList.remove('on'); return;}
@@ -2492,11 +2526,12 @@ function sfxWhistle() { // 导弹来袭呼啸：高音滑降（与 0.8s 预警�
       o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + 0.82); }
   } catch (e) {} }
 const sndLast = {}; // 武器音效限流时间戳（UI 侧）
-function sfxShot(w) { // 战斗开火声（全合成零采样）：步兵=短促枪声/火箭=呼啸发射/轻坦=炮响/重坦=重炮/机枪塔=连发点射
+function sfxShot(w) { // 战斗开火声（全合成零采样）：步兵=刀枪相撞金属响（M12 夜批近战化）/火箭=呼啸发射/轻坦=炮响/重坦=重炮/机枪塔=连发点射
   try { if (isMuted() || !audioCtx()) return; const t = AC.currentTime, jit = 0.92 + Math.random() * 0.16;
     const noise = (dur, type, f0, f1, vol) => { const src = AC.createBufferSource(); src.buffer = noiseBuf(); src.playbackRate.value = jit; const fl = AC.createBiquadFilter(); fl.type = type; fl.frequency.setValueAtTime(f0, t); if (f1) fl.frequency.exponentialRampToValueAtTime(f1, t + dur); const g = AC.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); src.connect(fl); fl.connect(g); g.connect(AC.destination); src.start(t); src.stop(t + dur + 0.02); };
     const thump = (f0, f1, dur, vol) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f0 * jit, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur + 0.02); };
-    if (w === 'inf') noise(0.07, 'bandpass', 1700, 900, 0.055);
+    const ping = (f0, dur, vol) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f0 * jit, t); o.frequency.exponentialRampToValueAtTime(f0 * 0.82 * jit, t + dur); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur + 0.02); }; // 金属泛音：起始高频、收尾略降，模拟刃口互击的衰减
+    if (w === 'inf') { noise(0.05, 'highpass', 2400, null, 0.075); ping(2137, 0.075, 0.055); ping(2963, 0.055, 0.038); ping(4211, 0.04, 0.022); } // 刀枪相撞：高频脆响打底＋三阶不谐泛音叮当
     else if (w === 'tower') noise(0.05, 'bandpass', 2300, 1200, 0.04);
     else if (w === 'rocket') noise(0.2, 'bandpass', 500, 2600, 0.06);
     else if (w === 'ltank') { thump(160, 55, 0.13, 0.10); noise(0.09, 'lowpass', 900, 300, 0.05); }
@@ -2675,7 +2710,7 @@ function startDefense() {
   $('duel').style.display = 'none';
   S = initDefenseState(); resetTransient(); introDone = true; S.camY = 0; buildTerrain();
   $('duelBar').style.display = 'flex'; refreshDuelBar();
-  toast('🛡 布防模式：像平时一样建造、出兵，摆好的基地就是你的防线');
+  toast('🛡 布防模式：在指挥中心绿圈内建造、出兵驻守，摆好的基地就是你的防线');
 }
 function refreshDuelBar() {
   if (!S || S.mode !== 'defense') return;
@@ -2795,7 +2830,7 @@ if (S.over &&!overShown) { overShown = true; settle();}
 requestAnimationFrame(loop);
 window.QX_DEBUG = { get state() { return S;}, CFG, spawn: (side, type, x, y) => S? mkUnit(S, type, side, x, y): null, initState, initEndlessState, updateGame,
 startLevel, startEndless, startDaily, dailyForDate, dailyDateStr, callStrike: (x, y) => S? callStrike(S, x, y): false, strikeDamage: (x, y, side) => S? strikeDamage(S, x, y, side || 'P'): 0,
-canPlace, placeBuilding, queueUnit, setOrder, getSave: () => SAVE,
+canPlace, placeBuilding, placeFailReason, queueUnit, setOrder, getSave: () => SAVE,
 PLAT, adQueue: () => readAdQueue(store), settleAds: () => PLAT.settlePendingAds(), watchAd: (k, s) => PLAT.watchAd(k, s), openBoard, applyRevive: () => S? applyRevive(S): false, bgmOn: () => BGM.on, isMuted: () => isMuted(),
 duelMatch, startDefense, publishDefense, startDuelWith, initDuelState, initDefenseState, snapshotFromDefense, cleanSnapshot, DUEL_AI_BASES, computeFog, foeBuildingVis, foeUnitVisible, openDuel};
 }
@@ -2805,7 +2840,7 @@ if (typeof module!== 'undefined' && module.exports) {
 module.exports = { CFG, damageMultiplier, dpsAgainst, refineryPayback, createEconomy, simulateBattle,
 calcStars, endlessBudgetFor, endlessWaveComp, endlessScore,
 defaultSave, normalizeSave, loadSave, saveSave, SAVE_KEY,
-initState, initEndlessState, applyLevel, updateGame, checkWinner, powerInfo, refineryCount, canPlace, placeBuilding, buildingCost, queueUnit, popOf, boostActive, fireFx, mkUnit,
+initState, initEndlessState, applyLevel, updateGame, checkWinner, powerInfo, refineryCount, canPlace, placeBuilding, placeFailReason, buildingCost, queueUnit, popOf, boostActive, fireFx, mkUnit, setOrder,
 clampSubmitScore, mergeSaveHigh, battleReport, applyRevive,
 swTick, swAdBoost, callStrike, strikeDamage, updateSuperweapon, playerClusterCenter, rushProduction, rushTargetCount,
 dailyDateStr, dailySeedFrom, dailyForDate, applyDailyMods, initDailyState, awardDailyIfWon, tutStep, guideStepOf, GUIDE_ORDER,
