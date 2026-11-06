@@ -979,6 +979,7 @@ function acquire(state, u) {
   // 旧版两病：①人人单挑各自的攻击者、火力分散；②纯移动单位被射程外敌人（火箭兵打步兵）白打不还手、贴身有战也不参战（主人 2026-11-06 实玩反馈）
   const foes = state.units.filter(e => e.side !== u.side && e.hp > 0);
   if (u.order.type === 'focus') { const t = findById(state, u.order.targetId); if (t && t.hp > 0) return t; u.order = { type: 'attackmove', x: u.x, y: u.y }; }
+  if (u.order.type === 'move' && u.order.strict) return null; // M12 夜批三：玩家直令移动＝严格移动——不还手、不参战、不追打我的人、不顺手打建筑，一心赶到目的地（主人报：想让部队回头跑，索敌的还手带/远追分支老把人拽回战场、跟指令冲突）。系统移动（出兵赶集结点）不带 strict，仍按夜批一口径自卫
   const rngU = CFG.units[u.type].range;
   const atk = foes.find(e => e.id === u.lastAttackerId);
   const retBand = rngU + 1.3 + (rngU < 1 ? 0.6 : 0); // M12 夜批：近战兵（射程<1）还手带 +0.6——射程改 0.7 后原带宽够不着近身骚扰者；最大射程风筝（distTo≈3）仍不追，那是攻击前进的活
@@ -1000,6 +1001,11 @@ function acquire(state, u) {
   }
   // 纯移动时：射程内建筑也可打
   if (u.order.type === 'move') { for (const b of state.buildings) { if (b.side !== u.side && b.hp > 0 && distTo(u, b) <= CFG.units[u.type].range + 0.4) return b; } }
+  if (u.order.type === 'idle') { // M12 夜批三：待命驰援——无令单位只认视野 4.5 格，战线在 5 格外打翻天他也站着看（主人报「后面会有单独的人发愣不打」）。7 格内有友军正在交战 → 驰援友军的目标
+    let bf = null, bd = 7;
+    for (const a of state.units) { if (a.side !== u.side || a === u || a.hp <= 0 || !a.combatTarget || a.combatTarget.hp <= 0) continue; const d = Math.hypot(a.x - u.x, a.y - u.y); if (d < bd && Math.hypot(a.combatTarget.x - u.x, a.combatTarget.y - u.y) <= 7) { bd = d; bf = a.combatTarget; } }
+    if (bf) return bf;
+  }
   return null;
 }
 function ensurePath(state, u, tx, ty) {
@@ -2052,7 +2058,7 @@ if (own) { S.selection = [own.id]; markSquadButtons(null); sfx('select'); return
 if (!S.selection.length) return;
 const now = performance.now(), isDouble = now - lastTap.t < 350 && Math.hypot(w.x - lastTap.x, w.y - lastTap.y) < 1.2;
 lastTap = { t: now, x: w.x, y: w.y};
-orderToSelection((u, i) => { const d = formationDest(w.x, w.y, i); return { type: isDouble? 'attackmove': 'move', x: d.x, y: d.y};});
+orderToSelection((u, i) => { const d = formationDest(w.x, w.y, i); return { type: isDouble? 'attackmove': 'move', strict: !isDouble, x: d.x, y: d.y};}); // 夜批三：单击直令移动带 strict（严格移动不恋战，见 acquire）；双击攻击前进不带
 if (guideRt) { if (isDouble) guideRt.attackOrdered = true; else guideRt.moved = true; }
 sfx('order');
 }
