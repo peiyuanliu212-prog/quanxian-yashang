@@ -12,8 +12,9 @@
 </script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  body { background:#0c0e10; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color:#e8ebee; }
-  #phone { max-width:430px; margin:0 auto; background:#14171b; min-height:100vh; display:flex; flex-direction:column; position:relative; }
+  html { height:100%; }
+  body { background:#0c0e10; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color:#e8ebee; height:100%; overflow:hidden; overscroll-behavior:none; }
+  #phone { max-width:430px; margin:0 auto; background:#14171b; min-height:100vh; height:100dvh; display:flex; flex-direction:column; position:relative; }
   .num { font-family:ui-monospace,Consolas,"SF Mono",monospace; font-variant-numeric:tabular-nums; }
   /* 顶部资源条：军工控制台 */
   #hud { background:linear-gradient(#2b3036,#1e2226); padding:6px 8px; padding-top:calc(6px + var(--safe-top, 0px)); font-size:13px; border-bottom:3px solid #57626d; box-shadow:inset 0 1px 0 rgba(255,255,255,.16), inset 0 0 0 1px rgba(125,180,240,.22), 0 2px 5px rgba(0,0,0,.45); clip-path:polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px)); }
@@ -196,6 +197,7 @@
       <div class="res" id="powwrap">⚡ <span id="power" class="num">0/0</span><span id="powbar"><span id="powfill" class="seg grn" style="display:block;"></span></span></div>
       <div class="res">👥 <span id="pop" class="num">0/25</span></div>
       <div class="res">⏱ <span id="clock" class="num">0:00</span></div>
+      <div class="res"><button id="btnMute" style="background:#2c3136;color:#e8ebee;border:1px solid #59636d;border-radius:5px;font-size:13px;padding:1px 7px;">🔊</button></div>
     </div>
     <div class="row" style="margin-top:4px;">
       <div class="hqbar" id="enemyHQ"><div style="width:100%"></div><span>🎯进攻目标·敌指挥中心</span></div>
@@ -548,7 +550,7 @@ function findPath(state, sx, sy, tx, ty) {
 
 // ============ module: save（存档唯一出入口；localStorage 键 quanxian_save_v1） ============
 const SAVE_KEY = 'quanxian_save_v1';
-function defaultSave() { return { unlocked: 1, stars: [0, 0, 0, 0, 0, 0, 0, 0], endlessBest: 0, endlessStars: 0, totalStars: 0, daily: { date: '', done: false }, tutorial: { build: false, squad: false, focus: false }, tutDone: false, groupNoticeOff: false, raceBest: [0, 0, 0, 0, 0, 0, 0, 0], duelScore: 1000 }; }
+function defaultSave() { return { unlocked: 1, stars: [0, 0, 0, 0, 0, 0, 0, 0], endlessBest: 0, endlessStars: 0, totalStars: 0, daily: { date: '', done: false }, tutorial: { build: false, squad: false, focus: false }, tutDone: false, groupNoticeOff: false, raceBest: [0, 0, 0, 0, 0, 0, 0, 0], duelScore: 1000, muted: false }; }
 function normalizeSave(raw) { // 容错：任何脏数据都收敛到合法形状
   const d = defaultSave(); if (!raw || typeof raw !== 'object') return d;
   const clampInt = (v, lo, hi) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : lo; };
@@ -568,6 +570,7 @@ function normalizeSave(raw) { // 容错：任何脏数据都收敛到合法形�
   d.groupNoticeOff = raw.groupNoticeOff === true; // 历史字段兼容保留（M8 群福利公告已于 M9 下架，本字段不再使用，仅保证旧档读入不报错）
   if (Array.isArray(raw.raceBest)) for (let i = 0; i < 8; i++) d.raceBest[i] = clampInt(raw.raceBest[i], 0, 86400); // M9 竞速本地最佳用时（秒）
   d.duelScore = clampInt(raw.duelScore == null ? 1000 : raw.duelScore, 0, 99999); // M11 对决分本地镜像（权威在服务端 /duel/me，进对决页刷新）
+  d.muted = raw.muted === true; // M12 声音开关（本机偏好，不进云同步合并）
   return d;
 }
 function pickStorage(storage) { if (storage) return storage; try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } }
@@ -599,7 +602,7 @@ function skeletonState(mode) {
            ecoP: createEconomy(0), ecoE: createEconomy(9999),
            buildings: [], units: [], selection: [], camY: 0, introT: 0,
            stations: [], obstacles: buildObstacles('standard'),
-           waves: [], waveIdx: 0, enemyProdT: 0, enemyProdIdx: 0, enemyPending: [], fx: [], fxTexts: [], fxRings: [], fxBooms: [], harvesters: [], warnT: -99, firstShotT: null,
+           waves: [], waveIdx: 0, enemyProdT: 0, enemyProdIdx: 0, enemyPending: [], fx: [], fxTexts: [], fxRings: [], fxBooms: [], harvesters: [], shakeT: 0, warnT: -99, firstShotT: null,
            outpost: [], rally: { x: 7.5, y: 19.5 }, variant: 0, waveRoute: 'hq',
            adStartUsed: false, reviveUsed: false, reviveOffer: false,
            adPause: false, airdropUsed: false, rushUsed: 0, swAdUsed: false, intelUsed: false,
@@ -1076,6 +1079,11 @@ function spawnWave(state, comp) {
 function updateEnemyAI(state, dt) {
   // 前哨：15s 后向第一增益站推进制造首战
   if (state.time >= 15 && !state.outpostMoved) { state.outpostMoved = true; const stn = state.stations[0]; if (stn) for (const id of state.outpost) { const u = state.units.find(x => x.id === id); if (u) setOrder(state, u, { type: 'attackmove', x: stn.cx, y: stn.cy }); } }
+  // M12 教学护航：L1 引导未学到出兵前，波次时钟冻结（只推迟未到波次、保间隔），出满 3 名新兵或 240s 保险丝任一到即放行
+  if (state.tutGate && state.waveIdx < state.waves.length) {
+    if ((state.producedInf || 0) >= 3 || state.time >= 240) state.tutGate = false;
+    else for (let wi = state.waveIdx; wi < state.waves.length; wi++) state.waves[wi].t += dt;
+  }
   // 波次
   while (state.waveIdx < state.waves.length && state.time >= state.waves[state.waveIdx].t) { spawnWave(state, state.waves[state.waveIdx].comp); state.waveIdx++; }
   // 持续出兵：兵营在则周期产 1，攒够 4 个则压上（起始/间隔取关卡参数，语义与 M1 一致）
@@ -1155,7 +1163,8 @@ function strikeDamage(state, x, y, side) {
     const d = Math.max(0, Math.hypot(b.x - x, b.y - y) - b.size / 2);
     if (d <= C.radius) { b.hp -= Math.min(C.unitDmg, b.maxHp * C.bldDmgFrac); if (b.side === 'P') { b.hurtT = state.time; state.warnT = state.time; } hits++; }
   }
-  state.fxBooms.push({ x, y, t: 0, max: 0.7, side, big: true });
+  state.fxBooms.push({ x, y, t: 0, max: 0.95, side, big: true });
+  state.shakeT = Math.max(state.shakeT || 0, 0.45); // M12：落弹震屏（渲染层只读）
   if (state.firstShotT === null) state.firstShotT = state.time;
   return hits;
 }
@@ -1239,16 +1248,16 @@ function tutStep(tutorial) {
 }
 // M10 新手引导步骤链（纯函数，输入运行时快照、与 DOM 解耦供 test_logic 直测）：按序返回第一个未完成步，全完成返回 'done'。
 // L1 开局已预置电厂/精炼/兵营各一座（冻结设计），三步的动作口径＝各「再补建一座」；快照里的 new* 指本局是否已新放置对应建筑。
-const GUIDE_ORDER = ['power', 'refinery', 'barracks', 'infantry', 'squad', 'move', 'attack', 'boost'];
+const GUIDE_ORDER = ['power', 'barracks', 'infantry', 'squad', 'move', 'attack', 'refinery', 'boost']; // M12 重排：先出兵保家再扩经济（旧序第 2 步逼等钱建精炼厂、新手被反扑拆家，主人 2026-11-06 实玩反馈）
 function guideStepOf(snap) {
   const s = snap || {};
   if (!s.newPower) return 'power';
-  if (!s.newRefinery) return 'refinery';
-  if (!s.newBarracks) return 'barracks';
+  if (!s.newBarracks && !s.hasBarracks) return 'barracks';
   if (!((s.producedInf || 0) >= 3)) return 'infantry';
   if (!s.squadAll) return 'squad';
   if (!s.moved) return 'move';
   if (!(s.attackOrdered && s.firstKill)) return 'attack';
+  if (!s.newRefinery) return 'refinery';
   if (s.hasStation && !s.stationOwned) return 'boost';
   return 'done';
 }
@@ -1280,6 +1289,7 @@ function updateGame(state, dt) {
   state.fxTexts = state.fxTexts.filter(f => (f.t += dt) < f.max);
   state.fxRings = state.fxRings.filter(f => (f.t += dt) < f.max);
   state.fxBooms = state.fxBooms.filter(f => (f.t += dt) < f.max);
+  if (state.shakeT > 0) state.shakeT = Math.max(0, state.shakeT - dt);
   let w = null;
   if (state.mode === 'endless') {
     const p = hqOf(state, 'P');
@@ -1691,7 +1701,7 @@ if (typeof document !== 'undefined') {
   // ---- 渲染主函数 ----
   function render() {
     ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.save(); ctx.translate(0, -S.camY);
+    ctx.save(); const shA = (S.shakeT || 0) * 15; ctx.translate(shA ? (Math.random() * 2 - 1) * shA : 0, -S.camY + (shA ? (Math.random() * 2 - 1) * shA : 0));
     if (terrainCv) ctx.drawImage(terrainCv, 0, S.camY, cv.width, CFG.viewH, 0, S.camY, cv.width, CFG.viewH);
     else { ctx.fillStyle = '#71824c'; ctx.fillRect(0, S.camY, cv.width, CFG.viewH); }
     // M4 润色：矿点晶体闪烁（动态微光，位置/相位由种子定死，不逐帧随机）
@@ -1776,15 +1786,34 @@ if (typeof document !== 'undefined') {
       ctx.lineWidth = 2.4; ctx.strokeStyle = p.side === 'P' ? '#ffd94d' : '#ff4030'; ctx.stroke();
       ctx.beginPath(); ctx.arc(bx, by, R * frac, 0, Math.PI * 2); ctx.lineWidth = 1.6; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(bx - R, by); ctx.lineTo(bx + R, by); ctx.moveTo(bx, by - R); ctx.lineTo(bx, by + R); ctx.lineWidth = 1; ctx.stroke();
-      if (p.side === 'E') { ctx.fillStyle = '#ff5040'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⚠ 轰炸预警 · 快撤！', bx, by - R - 6); }
+      // M12：来袭导弹本体（从当前画面顶边外加速俯冲至落点，全程可见，尾焰＋烟迹；frac 1→0 即剩余时间比）
+      { const k = 1 - frac, ez = k * k, sx0 = bx - 80, sy0 = S.camY - 14, sx = sx0 + (bx - sx0) * ez, sy = sy0 + (by - sy0) * ez;
+        const tr = mulberry32(Math.floor(p.x * 131 + p.y * 57));
+        for (let i = 1; i <= 6; i++) { const bk = Math.max(0, ez - i * 0.055); if (bk <= 0) break; const px2 = sx0 + (bx - sx0) * bk * bk, py2 = sy0 + (by - sy0) * bk * bk; ctx.beginPath(); ctx.arc(px2 + (tr() - 0.5) * 7, py2 + (tr() - 0.5) * 7, 3 + i * 1.7, 0, Math.PI * 2); ctx.fillStyle = 'rgba(200,200,200,' + (0.30 - i * 0.04).toFixed(2) + ')'; ctx.fill(); }
+        ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.atan2(by - sy0, bx - sx0));
+        const fl = 11 + Math.sin(S.time * 42) * 4;
+        ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(-9 - fl, -3.4); ctx.lineTo(-9 - fl - 4, 0); ctx.lineTo(-9 - fl, 3.4); ctx.closePath(); ctx.fillStyle = 'rgba(255,140,40,0.92)'; ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(-9 - fl * 0.55, -1.8); ctx.lineTo(-9 - fl * 0.55 - 2, 0); ctx.lineTo(-9 - fl * 0.55, 1.8); ctx.closePath(); ctx.fillStyle = 'rgba(255,225,140,0.95)'; ctx.fill();
+        ctx.fillStyle = '#c8ccd2'; ctx.fillRect(-9, -3.4, 15, 6.8);
+        ctx.fillStyle = '#e8ecf0'; ctx.beginPath(); ctx.moveTo(6, -3.4); ctx.lineTo(13, 0); ctx.lineTo(6, 3.4); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#c03a2c'; ctx.fillRect(2.5, -3.4, 3.4, 6.8);
+        ctx.fillStyle = '#8f979f'; ctx.fillRect(-11.5, -5.4, 3.4, 3.4); ctx.fillRect(-11.5, 2, 3.4, 3.4);
+        ctx.restore(); }
+      if (p.side === 'E') { ctx.fillStyle = '#ff5040'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⚠ 轰炸预警 · 快撤！', bx, by - R -6); }
     }
     for (const u of S.units) { if (S.mode === 'duel' && u.side === 'E' && !foeUnitVisible(S, u)) continue; drawUnit(ctx, u); }
     // 建成展开环
     for (const r of S.fxRings) { const k = r.t / r.max; ctx.beginPath(); ctx.arc(r.x * CELL, r.y * CELL, 6 + k * CELL * 1.15, 0, Math.PI * 2); ctx.strokeStyle = (r.side === 'P' ? 'rgba(125,180,240,' : 'rgba(255,138,112,') + (0.75 * (1 - k)).toFixed(2) + ')'; ctx.lineWidth = 2.4; ctx.stroke(); }
     // M4 润色：爆炸粒子（死亡/超武落弹共用 fxBooms：闪光核＋扩散环＋火花）
     for (const f of S.fxBooms) {
-      const k = f.t / f.max, bx = f.x * CELL, by = f.y * CELL, R = (f.big ? 34 : 15) * (f.scale || 1) * (0.35 + k);
-      ctx.beginPath(); ctx.arc(bx, by, R * 0.55, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,' + Math.round(190 - k * 90) + ',60,' + (0.55 * (1 - k)).toFixed(2) + ')'; ctx.fill();
+      const k = f.t / f.max, bx = f.x * CELL, by = f.y * CELL, R = (f.big ? 54 : 15) * (f.scale || 1) * (0.35 + k);
+      if (f.big) { // M12 超武级爆炸：白闪核＋双层冲击环＋升腾浓烟（小爆炸不走此支）
+        if (k < 0.2) { ctx.beginPath(); ctx.arc(bx, by, R * 0.95 * (1 - k / 0.2 * 0.4), 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,246,' + (0.9 * (1 - k / 0.2)).toFixed(2) + ')'; ctx.fill(); }
+        ctx.beginPath(); ctx.arc(bx, by, R * 1.45, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,190,90,' + (0.45 * (1 - k)).toFixed(2) + ')'; ctx.lineWidth = 3; ctx.stroke();
+        const sr3 = mulberry32(Math.floor(f.x * 77 + f.y * 39 + 11));
+        for (let i = 0; i < 5; i++) { const a = sr3() * Math.PI * 2, d0 = 5 + sr3() * 20, px3 = bx + Math.cos(a) * d0 * (0.4 + k * 0.6), py3 = by + Math.sin(a) * d0 * 0.5 - k * 34; ctx.beginPath(); ctx.arc(px3, py3, 10 + k * 22, 0, Math.PI * 2); ctx.fillStyle = 'rgba(66,64,62,' + (0.42 * (1 - k)).toFixed(2) + ')'; ctx.fill(); }
+      }
+      ctx.beginPath(); ctx.arc(bx, by, R * (f.big ? 0.82 : 0.55), 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,' + Math.round(190 - k * 90) + ',60,' + (0.55 * (1 - k)).toFixed(2) + ')'; ctx.fill();
       ctx.beginPath(); ctx.arc(bx, by, R, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(255,160,70,' + (0.8 * (1 - k)).toFixed(2) + ')'; ctx.lineWidth = 2; ctx.stroke();
       const sr = mulberry32(Math.floor(f.x * 91 + f.y * 57 + (f.big ? 7 : 3)));
       ctx.fillStyle = 'rgba(255,220,130,' + (0.9 * (1 - k)).toFixed(2) + ')';
@@ -1884,14 +1913,14 @@ if (S && S.mode === 'level' && S.levelIdx === 0 && !SAVE.tutorial[step]) { SAVE.
 // 形态：舞台底部半透明字幕条（#tutbar）＋当前目标控件呼吸高亮（.tut-hi）＋箭头（#tutArrow）；每步只认真实动作完成才推进，不靠点击翻页。
 const GUIDE_TEXT = {
   power: '👋 我是你的副官，咱们一步步来。先点下方建造卡「电厂」，再点基地旁的空地放下——所有建筑都要用电',
-  refinery: '💰 再建一座「精炼厂」，放基地旁空地：它每 5 秒自动采矿赚钱，出兵打仗全靠它',
-  barracks: '🏯 再补一座「兵营」：两座兵营能同时出兵，成军快一倍',
-  infantry: '🪖 点生产区的「步兵」卡，造出 3 名新兵（每名 100 金，点 3 次排队就行）',
-  squad: '🎖 点编队键「全军」，把你的部队全部选起来',
-  move: '👆 部队选中了——点一块空地，让他们移动过去',
-  attack: '⚔ 双击前方空地＝攻击前进！带队推掉第一个敌人（前哨守军或敌方建筑都算）',
-  boost: '✦ 地图中央有座增益站：派士兵站进圈里 4 秒就能占领，占了精炼收入 +30%（上下拖动地图可以找它）',
-  done: '🎉 教学完成！记住节奏：扩电→赚钱→出兵→全军推进。剩下的战场交给你了，指挥官',
+  refinery: '💰 家守住了，再扩经济：建第二座「精炼厂」（750 金）放基地旁，每 5 秒自动采矿。出兵打仗全靠钱，扩张前家里留一队人守着',
+  barracks: '🏯 点建造卡「兵营」放基地旁——出兵的家。两座兵营能同时出兵，成军快一倍',
+  infantry: '🪖 点生产区的「步兵」卡造兵（100 金/名，点 3 次排队造 3 名）。记搭配：步兵便宜成群、火箭兵（200 金）专克坦克、坦克皮厚顶前面——有兵才守得住家',
+  squad: '🎖 点编队键「全军」选中所有部队；「步兵队/火箭队/装甲队」只选一类。选中谁，接下来的命令就下给谁',
+  move: '👆 选中部队后，点地图空地＝移动过去（路上不还手）；点「集结点」再点地图，新造的兵出厂自动去那报到。拖动地图、或拖右侧小地图竖条能看更远',
+  attack: '⚔ 双击空地＝攻击前进（路上遇敌自动开火）；直接点某个敌兵/敌建筑＝集火先打它。带队推掉北边的前哨守军！',
+  boost: '✦ 地图中央有座增益站：派士兵站进圈里 4 秒就能占领，占了精炼收入 +30%（拖动地图可以找它）',
+  done: '🎉 教学完成！记住节奏：先出兵保家→带队推进→再扩经济赚钱。剩下的战场交给你了，指挥官',
 };
 const GUIDE_TARGET = { power: '#buildRow button[data-build="power"]', refinery: '#buildRow button[data-build="refinery"]', barracks: '#buildRow button[data-build="barracks"]', infantry: '#prodRow button[data-unit="inf"]', squad: '#squads button[data-squad="all"]', move: '#cv', attack: '#cv', boost: 'station', done: null };
 let guideRt = null, guideHiEl = null;
@@ -1901,7 +1930,7 @@ function guideCountB(t) { return S.buildings.filter(b => b.side === 'P' && b.typ
 function guideSnapshot() {
   if (!guideRt) guideReset();
   if (!guideRt.base) guideRt.base = { power: guideCountB('power'), refinery: guideCountB('refinery'), barracks: guideCountB('barracks') };
-  return { newPower: guideCountB('power') > guideRt.base.power, newRefinery: guideCountB('refinery') > guideRt.base.refinery, newBarracks: guideCountB('barracks') > guideRt.base.barracks,
+  return { newPower: guideCountB('power') > guideRt.base.power, newRefinery: guideCountB('refinery') > guideRt.base.refinery, newBarracks: guideCountB('barracks') > guideRt.base.barracks, hasBarracks: guideCountB('barracks') > 0,
     producedInf: S.producedInf || 0, squadAll: guideRt.squadAll, moved: guideRt.moved, attackOrdered: guideRt.attackOrdered,
     firstKill: (S.kills || 0) > 0, hasStation: S.stations.length > 0, stationOwned: S.stations.some(s => s.owner === 'P') };
 }
@@ -1968,11 +1997,17 @@ if (guideRt) { if (isDouble) guideRt.attackOrdered = true; else guideRt.moved = 
 sfx('order');
 }
 // ---- 输入：拖动滚动 / 点按 ----
-cv.addEventListener('pointerdown', e => { if (!S) return; drag = { y: e.clientY, camY: S.camY, moved: false, p: toCanvas(e)}; cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointerdown', e => { if (!S) return; e.preventDefault(); drag = { y: e.clientY, camY: S.camY, moved: false, p: toCanvas(e)}; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
+cv.addEventListener('pointercancel', () => { drag = null; });
 cv.addEventListener('pointermove', e => { if (!S) return; const p = toCanvas(e); hover = toWorld(p); if (drag && Math.abs(e.clientY - drag.y) > 9) { drag.moved = true; introDone = true; S.camY = clampCam(drag.camY - (e.clientY - drag.y) * (cv.height / cv.getBoundingClientRect().height));}});
 cv.addEventListener('pointerup', e => { if (drag &&!drag.moved) handleTap(toCanvas(e)); drag = null;});
 cv.addEventListener('contextmenu', e => e.preventDefault());
-mm.addEventListener('pointerdown', e => { if (!S) return; introDone = true; mmBigOn = !mmBigOn; }); // M11：点雷达竖条展开/收起全图（展开图点按跳镜头）
+// M11：点雷达竖条展开/收起全图；M12：竖条兼作滚动条——拖动竖条直接拉镜头（主人习惯划小地图），轻点才展开全图
+let mmDrag = null;
+mm.addEventListener('pointerdown', e => { if (!S) return; e.preventDefault(); introDone = true; mmDrag = { y: e.clientY, camY: S.camY, moved: false }; try { mm.setPointerCapture(e.pointerId); } catch (_) {} });
+mm.addEventListener('pointermove', e => { if (!S || !mmDrag) return; const dy = e.clientY - mmDrag.y; if (Math.abs(dy) > 6) mmDrag.moved = true; if (mmDrag.moved) { const rect = mm.getBoundingClientRect(); const d = dimsOf(S); S.camY = clampCam(mmDrag.camY + dy * (d.rows * CFG.cell) / Math.max(1, rect.height)); } });
+mm.addEventListener('pointerup', () => { if (mmDrag && !mmDrag.moved) mmBigOn = !mmBigOn; mmDrag = null; });
+mm.addEventListener('pointercancel', () => { mmDrag = null; });
 let mmBigOn = false;
 function drawMmBig() { // M11 小地图展开面板：整图缩略（地形＋建筑＋单位＋站＋视口框），攻防叠加迷雾规则；战役全显
   const c = $('mmBig'); if (!c) return;
@@ -2080,7 +2115,7 @@ overShown = false; introDone = false; placementType = null; rallyMode = false; s
 document.querySelectorAll('#buildRow button').forEach(b => b.classList.remove('on'));
 $('rallyBtn').classList.remove('on'); $('over').style.display = 'none'; $('menu').style.display = 'none'; $('banner').style.display = 'block'; $('revivebar').style.display = 'none'; $('duelBar').style.display = 'none'; $('duel').style.display = 'none'; $('board').style.display = 'none'; $('intel').style.display = 'none';
 }
-function startLevel(idx) { S = initState(idx); resetTransient(); buildTerrain(); consumeInboxStart(); consumeInboxFunds();}
+function startLevel(idx) { S = initState(idx); if (idx === 0 && typeof SAVE !== 'undefined' && SAVE && !SAVE.tutDone) S.tutGate = true; resetTransient(); buildTerrain(); consumeInboxStart(); consumeInboxFunds();}
 function startEndless() { S = initEndlessState(); resetTransient(); buildTerrain(); consumeInboxStart(); consumeInboxFunds();}
 function startDaily() { S = initDailyState(); resetTransient(); buildTerrain(); consumeInboxStart(); consumeInboxFunds();}
 function toMenu() { S = null; settleCtx = null; $('over').style.display = 'none'; $('revivebar').style.display = 'none'; $('intel').style.display = 'none'; renderMenu(); $('menu').style.display = 'block'; PLAT.settlePendingAds(); }
@@ -2158,6 +2193,8 @@ $('nextBtn').addEventListener('click', () => { if (S && S.mode === 'level' && S.
 $('menuBtn').addEventListener('click', toMenu);
 $('endlessBtn').addEventListener('click', startEndless);
 $('dailyBtn').addEventListener('click', startDaily);
+$('btnMute').addEventListener('click', () => { SAVE.muted = !SAVE.muted; saveSave(SAVE); if (SAVE.muted) bgmStop(); else bgmStart(); refreshMuteBtn(); });
+refreshMuteBtn();
 renderMenu();
 
 // ============ module: platform（浏览器接线：虎扑 SDK 单点接入；签名逐字按技能包原文，见 README 核对表） ============
@@ -2407,8 +2444,10 @@ function consumeInboxFunds() {
 }
 // ---- 合成确认音（WebAudio 合成短促电子音，无任何素材采样；选中/指令/占领三类） ----
 let AC = null;
+function isMuted() { return typeof SAVE !== 'undefined' && !!SAVE && SAVE.muted === true; }
 function sfx(kind) {
   try {
+    if (isMuted()) return;
     const Ctor = window.AudioContext || window.webkitAudioContext; if (!Ctor) return;
     AC = AC || new Ctor(); if (AC.state === 'suspended') AC.resume();
     const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
@@ -2419,6 +2458,53 @@ function sfx(kind) {
     o.start(t); g.gain.exponentialRampToValueAtTime(0.001, t + (kind === 'capture' ? 0.17 : 0.09)); o.stop(t + 0.18);
   } catch (e) {}
 }
+// ===== M12 声音升级：超武呼啸/爆轰＋原创合成 BGM（全部 WebAudio 实时合成，零素材采样） =====
+function audioCtx() { const Ctor = window.AudioContext || window.webkitAudioContext; if (!Ctor) return null; AC = AC || new Ctor(); if (AC.state === 'suspended') AC.resume(); return AC; }
+let _noiseBuf = null;
+function noiseBuf() { if (_noiseBuf) return _noiseBuf; const len = Math.floor(AC.sampleRate * 1.2); _noiseBuf = AC.createBuffer(1, len, AC.sampleRate); const d = _noiseBuf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1; return _noiseBuf; }
+function sfxWhistle() { // 导弹来袭呼啸：高音滑降（与 0.8s 预警同步）
+  try { if (isMuted() || !audioCtx()) return; const t = AC.currentTime;
+    for (const det of [1, 1.008]) { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(1650 * det, t); o.frequency.exponentialRampToValueAtTime(430 * det, t + 0.78);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.045, t + 0.12); g.gain.setValueAtTime(0.045, t + 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+      o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + 0.82); }
+  } catch (e) {} }
+function sfxBoom() { // 落弹爆轰：低频轰隆＋噪声洗＋爆裂脆响三层
+  try { if (isMuted() || !audioCtx()) return; const t = AC.currentTime;
+    const o = AC.createOscillator(), og = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(118, t); o.frequency.exponentialRampToValueAtTime(27, t + 0.55);
+    og.gain.setValueAtTime(0.55, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.62); o.connect(og); og.connect(AC.destination); o.start(t); o.stop(t + 0.65);
+    const n = AC.createBufferSource(); n.buffer = noiseBuf(); const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(880, t); lp.frequency.exponentialRampToValueAtTime(105, t + 0.8);
+    const ng = AC.createGain(); ng.gain.setValueAtTime(0.42, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.85); n.connect(lp); lp.connect(ng); ng.connect(AC.destination); n.start(t); n.stop(t + 0.9);
+    const n2 = AC.createBufferSource(); n2.buffer = noiseBuf(); n2.playbackRate.value = 1.7; const hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1300;
+    const n2g = AC.createGain(); n2g.gain.setValueAtTime(0.15, t); n2g.gain.exponentialRampToValueAtTime(0.001, t + 0.07); n2.connect(hp); hp.connect(n2g); n2g.connect(AC.destination); n2.start(t); n2.stop(t + 0.09);
+  } catch (e) {} }
+// BGM：96 BPM 四小节循环（Am–F–C–G），贝斯 8 分脉冲＋底鼓/军鼓/踩镲＋拨弦主音＋和声垫，全合成原创
+const BGM = { on: false, step: 0, nextT: 0, timer: null, gain: null };
+const BGM_ROOTS = [55, 43.65, 65.41, 49.0], BGM_CHORDS = [[110, 130.81, 164.81], [87.31, 110, 130.81], [130.81, 164.81, 196.0], [98.0, 123.47, 146.83]];
+const BGM_LEAD = { 0: 69, 6: 72, 10: 76, 14: 72, 16: 69, 22: 65, 26: 69, 30: 72, 32: 67, 38: 72, 42: 76, 46: 79, 48: 71, 54: 67, 58: 62, 62: 59 };
+const BGM_STEP = 60 / 96 / 4, BGM_MF = m => 440 * Math.pow(2, (m - 69) / 12);
+function bgmNote(freq, t, dur, type, vol, lpFreq) { const o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.value = freq;
+  let out = g; if (lpFreq) { const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lpFreq; o.connect(f); f.connect(g); } else o.connect(g);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); g.connect(BGM.gain); o.start(t); o.stop(t + dur + 0.02); }
+function bgmNoise(t, dur, vol, type, freq) { const n = AC.createBufferSource(); n.buffer = noiseBuf(); n.playbackRate.value = 0.9 + Math.random() * 0.2;
+  const f = AC.createBiquadFilter(); f.type = type; f.frequency.value = freq; const g = AC.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  n.connect(f); f.connect(g); g.connect(BGM.gain); n.start(t); n.stop(t + dur + 0.02); }
+function bgmStep(s, t) { const bar = Math.floor(s / 16), root = BGM_ROOTS[bar], inBar = s % 16;
+  if (inBar === 0) for (const f of BGM_CHORDS[bar]) bgmNote(f, t, BGM_STEP * 15, 'triangle', 0.030);
+  if (inBar % 2 === 0) { const idx = inBar / 2, up = (idx === 2 || idx === 6) ? 2 : 1; bgmNote(root * up, t, 0.11, 'sawtooth', 0.16, 520); }
+  if (inBar === 0 || inBar === 8) { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(128, t); o.frequency.exponentialRampToValueAtTime(41, t + 0.11); g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.13); o.connect(g); g.connect(BGM.gain); o.start(t); o.stop(t + 0.15); }
+  if (inBar === 4 || inBar === 12) bgmNoise(t, 0.09, 0.13, 'bandpass', 1800);
+  if (inBar % 4 === 2) bgmNoise(t, 0.03, 0.045, 'highpass', 6500);
+  const lead = BGM_LEAD[s]; if (lead) bgmNote(BGM_MF(lead), t, 0.24, 'triangle', 0.11);
+}
+function bgmStart() { try { if (BGM.on || isMuted() || !audioCtx()) return;
+    BGM.gain = AC.createGain(); BGM.gain.gain.value = 0.42; BGM.gain.connect(AC.destination);
+    BGM.step = 0; BGM.nextT = AC.currentTime + 0.06; BGM.on = true;
+    BGM.timer = setInterval(() => { if (!BGM.on || !AC) return; if (typeof document !== 'undefined' && document.hidden) { BGM.nextT = AC.currentTime + 0.06; return; }
+      while (BGM.nextT < AC.currentTime + 0.22) { bgmStep(BGM.step, BGM.nextT); BGM.step = (BGM.step + 1) % 64; BGM.nextT += BGM_STEP; } }, 90);
+  } catch (e) {} }
+function bgmStop() { BGM.on = false; if (BGM.timer) clearInterval(BGM.timer); BGM.timer = null; if (BGM.gain) { try { BGM.gain.disconnect(); } catch (e) {} BGM.gain = null; } }
+function refreshMuteBtn() { const b = $('btnMute'); if (b) b.textContent = isMuted() ? '🔇' : '🔊'; }
+window.addEventListener('pointerdown', () => { bgmStart(); }, { once: true });
 // ---- M8 战中广告暂停（独立标记 adPause，仿 reviveOffer 全场冻结：波次/生产/充能一并停摆） ----
 // 拉起前置位；watchAd 返回或 20 秒看门狗先到者恢复。广告期间的发奖凭 snap.gid 核对，暂停恢复不影响落定。
 let adPauseTimer = null;
@@ -2644,6 +2730,7 @@ PLAT.cloudRestore();
 PLAT.settlePendingAds();
 // ---- 主循环 ----
 let lastTs = 0, stationOwnersPrev = [], reviveSettleTried = false;
+let swPrevPend = new Set(), swPrevState = null;
 function loop(ts) {
 requestAnimationFrame(loop);
 const dt = Math.min(0.05, lastTs? (ts - lastTs) / 1000: 0.016); lastTs = ts;
@@ -2660,6 +2747,9 @@ else { $('revivebar').style.display = 'flex'; if (!reviveSettleTried) { reviveSe
 } else { $('revivebar').style.display = 'none'; reviveSettleTried = false; }
 // 占领音效：任一增益站归属翻为己方时播合成确认音（UI 侧只读检测，不写状态）
 S.stations.forEach((stn, i) => { if (stationOwnersPrev[i] !== 'P' && stn.owner === 'P') sfx('capture'); stationOwnersPrev[i] = stn.owner; });
+// M12 超武音效（UI 侧只读检测）：新预警→呼啸；预警消失（＝落弹）→爆轰（状态对象换新局时重置集合，防误触）
+if (S !== swPrevState) { swPrevState = S; swPrevPend = new Set(); }
+{ const cur = new Set(S.swPending || []); for (const p of cur) if (!swPrevPend.has(p)) sfxWhistle(); for (const p of swPrevPend) if (!cur.has(p)) sfxBoom(); swPrevPend = cur; }
 hudT -= dt; if (hudT <= 0) { hudT = 0.15; refreshHUD();}
 if (SHOW_FPS) { fpsT -= dt; if (fpsT <= 0) { fpsT = 0.5; $('fps').textContent = 'FPS ' + Math.round(fpsEMA);} }
 render();
@@ -2670,7 +2760,7 @@ requestAnimationFrame(loop);
 window.QX_DEBUG = { get state() { return S;}, CFG, spawn: (side, type, x, y) => S? mkUnit(S, type, side, x, y): null, initState, initEndlessState, updateGame,
 startLevel, startEndless, startDaily, dailyForDate, dailyDateStr, callStrike: (x, y) => S? callStrike(S, x, y): false, strikeDamage: (x, y, side) => S? strikeDamage(S, x, y, side || 'P'): 0,
 canPlace, placeBuilding, queueUnit, setOrder, getSave: () => SAVE,
-PLAT, adQueue: () => readAdQueue(store), settleAds: () => PLAT.settlePendingAds(), watchAd: (k, s) => PLAT.watchAd(k, s), openBoard, applyRevive: () => S? applyRevive(S): false,
+PLAT, adQueue: () => readAdQueue(store), settleAds: () => PLAT.settlePendingAds(), watchAd: (k, s) => PLAT.watchAd(k, s), openBoard, applyRevive: () => S? applyRevive(S): false, bgmOn: () => BGM.on, isMuted: () => isMuted(),
 duelMatch, startDefense, publishDefense, startDuelWith, initDuelState, initDefenseState, snapshotFromDefense, cleanSnapshot, DUEL_AI_BASES, computeFog, foeBuildingVis, foeUnitVisible, openDuel};
 }
 
