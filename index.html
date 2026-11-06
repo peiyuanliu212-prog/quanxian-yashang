@@ -661,14 +661,20 @@ function cleanSnapshot(raw, uid, displayName, score, now) {
   if (!raw || typeof raw !== 'object' || raw.v !== 1) return null;
   if (!raw.map || raw.map.cols !== CFG.duel.cols || raw.map.rows !== CFG.duel.rows) return null;
   if (!raw.hq || !duelCellOk(raw.hq.gx, raw.hq.gy)) return null;
-  const cells = new Set([raw.hq.gx + ',' + raw.hq.gy]);
+  const cells = new Set();
+  const claim = (gx, gy, size) => { // M11 自审修复：按占地全格登记（HQ 3×3/大建筑 2×2/塔 1×1）——旧版只登记锚点，构造快照可叠放建筑、占地可探出地图
+    for (let x = gx; x < gx + size; x++) for (let y = gy; y < gy + size; y++) {
+      if (x >= CFG.duel.cols || y >= CFG.duel.rows) return false;
+      const k = x + ',' + y; if (cells.has(k)) return false; cells.add(k);
+    }
+    return true;
+  };
+  if (!claim(raw.hq.gx, raw.hq.gy, CFG.buildings.hq.size)) return null;
   const buildings = [];
   if (!Array.isArray(raw.buildings) || raw.buildings.length > CFG.duel.buildingCap) return null;
   for (const b of raw.buildings) {
     if (!b || !DUEL_BUILD_TYPES[b.type] || !duelCellOk(b.gx, b.gy)) return null;
-    const k = b.gx + ',' + b.gy;
-    if (cells.has(k)) return null;
-    cells.add(k);
+    if (!claim(b.gx, b.gy, CFG.buildings[b.type].size)) return null;
     buildings.push({ type: b.type, gx: b.gx, gy: b.gy });
   }
   const garrison = [];
@@ -2069,6 +2075,7 @@ $('ctrl').classList.toggle('locked', !on);
 function resetTransient() {
 guideReset();
 setControlsEnabled(true);
+mmBigOn = false; // M11 自审修复：小地图展开状态不跨局残留（下一局开局不该自带展开面板）
 overShown = false; introDone = false; placementType = null; rallyMode = false; swTargeting = false; settleCtx = null; stationOwnersPrev = []; reviveSettleTried = false;
 document.querySelectorAll('#buildRow button').forEach(b => b.classList.remove('on'));
 $('rallyBtn').classList.remove('on'); $('over').style.display = 'none'; $('menu').style.display = 'none'; $('banner').style.display = 'block'; $('revivebar').style.display = 'none'; $('duelBar').style.display = 'none'; $('duel').style.display = 'none'; $('board').style.display = 'none'; $('intel').style.display = 'none';
@@ -2441,14 +2448,15 @@ function openIntel() {
 // ---- 广告按钮显隐/禁用 ----
 function refreshAdButtons() {
   const ready = vataskReady() && !PLAT.adDone;
+  const duelLike = !!S && (S.mode === 'duel' || S.mode === 'defense'); // M11 自审修复：计分对决/布防禁用全部广告支援——守方是静态快照、无广告可用，开放会成不对称买优势
   const sb = $('adStartBtn');
-  if (sb) { const show = !!S && !S.over && !S.adStartUsed && ready; sb.style.display = show ? '' : 'none'; sb.disabled = controlsLocked || PLAT.busy; sb.textContent = PLAT.busy ? '📺 广告播放中…' : '📺 看广告 · 开局资金 +' + CFG.ad.startBonus; }
+  if (sb) { const show = !!S && !S.over && !S.adStartUsed && ready && !duelLike; sb.style.display = show ? '' : 'none'; sb.disabled = controlsLocked || PLAT.busy; sb.textContent = PLAT.busy ? '📺 广告播放中…' : '📺 看广告 · 开局资金 +' + CFG.ad.startBonus; }
   const db = $('adDoubleBtn');
   if (db) { const show = !!settleCtx && !settleCtx.doubled && settleCtx.stars > 0 && settleCtx.stars < 3 && ready && $('over').style.display === 'block'; db.style.display = show ? '' : 'none'; db.disabled = PLAT.busy; }
   const rb = $('adReviveBtn');
   if (rb) rb.disabled = PLAT.busy;
   // M8 支援行：广告未就绪/不在对局中整行隐藏（网页版降级不露残钮）；用量耗尽置灰写明，不消失跳版
-  const mid = ready && !!S && !S.over;
+  const mid = ready && !!S && !S.over && !duelLike;
   const sup = $('supportRow');
   if (sup) sup.style.display = mid ? '' : 'none';
   const ab = $('adAirdropBtn');
