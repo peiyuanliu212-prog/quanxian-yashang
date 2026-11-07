@@ -746,6 +746,35 @@ function planCloudMerge(storage, cloudRaw) {
   consider(1, cloud); // 旧格式单档 → 槽 1
   return { writes, legacy: true };
 }
+// ---- 战斗快照（M13 追补三：虎扑容器看完广告会重载页面，只补发奖励救不回正在打的那一局——乱世先例是进度与奖励两半都要保） ----
+// 看广告前把整局序列化落盘，重进时在加载页入口恢复战场。只存数据：单位 combatTarget 是对象引用（置空，恢复后索敌自动重算）、
+// 经济对象的方法不落盘（恢复时按数据重建）、特效/音效队列与道路缓存不落盘。仅战役/每日/无尽（对决有服务端局时，不本地恢复）。
+const BATTLE_SNAP_KEY = 'quanxian_battle_v1';
+function serializeBattle(state) {
+  if (!state || typeof state !== 'object') return null;
+  return JSON.parse(JSON.stringify(state, (k, v) => {
+    if (k === 'combatTarget' || k === '_roadSet') return undefined;
+    if (k === 'fx' || k === 'fxTexts' || k === 'fxRings' || k === 'fxBooms' || k === 'sndQ') return undefined;
+    if (k === 'log') return [];
+    if (k === 'obstacles' && v && typeof v === 'object' && typeof v.forEach === 'function' && !Array.isArray(v)) return Array.from(v); // obstacles 是 Set：落盘转数组，恢复时重建（漏了它重载后绘制会抛错、寻路会丢墙）
+    return v;
+  }));
+}
+function rehydrateBattle(data) {
+  if (!data || typeof data !== 'object' || !Array.isArray(data.units) || !Array.isArray(data.buildings)) return null;
+  const st = data;
+  const eco = e => { const o = createEconomy(0); if (e && typeof e === 'object') { o.funds = +e.funds || 0; o.totalEarned = +e.totalEarned || 0; o.totalSpent = +e.totalSpent || 0; } return o; };
+  st.ecoP = eco(st.ecoP); st.ecoE = eco(st.ecoE);
+  st.obstacles = new Set(Array.isArray(st.obstacles) ? st.obstacles : []); // 与 serializeBattle 的数组化成对
+  st._roadSet = null; st.fx = []; st.fxTexts = []; st.fxRings = []; st.fxBooms = []; st.sndQ = [];
+  let mx = 0;
+  for (const u of st.units) { u.combatTarget = null; u.path = []; u.tracerT = 0; if (u.id > mx) mx = u.id; }
+  for (const b of st.buildings) { if (b.id > mx) mx = b.id; }
+  if (mx >= uidSeq) uidSeq = mx + 1; // 恢复后新实体 id 不与旧实体相撞
+  if (st.gameSeq && st.gameSeq > gameSeqCtr) gameSeqCtr = st.gameSeq; // 广告 snap.gid 跨重载仍认同一局
+  st.adPause = false;
+  return st;
+}
 
 // ============ module: battle（状态/初始化/关卡载入） ============
 let S = null, uidSeq = 1;
@@ -2670,10 +2699,10 @@ overShown = false; introDone = false; placementType = null; rallyMode = false; s
 document.querySelectorAll('#buildRow button').forEach(b => b.classList.remove('on'));
 $('rallyBtn').classList.remove('on'); $('over').style.display = 'none'; $('menu').style.display = 'none'; $('banner').style.display = 'block'; $('revivebar').style.display = 'none'; $('duelBar').style.display = 'none'; $('duel').style.display = 'none'; $('board').style.display = 'none'; $('intel').style.display = 'none'; $('tech').style.display = 'none'; $('savePage').style.display = 'none'; // M13：科技页/存档页不跨局残留
 }
-function startLevel(idx) { S = initState(idx); if (idx === 0 && typeof SAVE !== 'undefined' && SAVE && !SAVE.tutDone) S.tutGate = true; resetTransient(); buildTerrain(); consumeInboxStart(); consumeInboxFunds();}
-function startEndless() { S = initEndlessState(); resetTransient(); buildTerrain(); consumeInboxStart(); consumeInboxFunds();}
-function startDaily() { S = initDailyState(); resetTransient(); buildTerrain(); consumeInboxStart(); consumeInboxFunds();}
-function toMenu() { S = null; settleCtx = null; $('over').style.display = 'none'; $('revivebar').style.display = 'none'; $('intel').style.display = 'none'; renderMenu(); $('menu').style.display = 'block'; PLAT.settlePendingAds(); }
+function startLevel(idx) { clearBattleSnapshot(); S = initState(idx); if (idx === 0 && typeof SAVE !== 'undefined' && SAVE && !SAVE.tutDone) S.tutGate = true; resetTransient(); buildTerrain(); consumeInboxStart(); consumeInboxFunds();}
+function startEndless() { clearBattleSnapshot(); S = initEndlessState(); resetTransient(); buildTerrain(); consumeInboxStart(); consumeInboxFunds();}
+function startDaily() { clearBattleSnapshot(); S = initDailyState(); resetTransient(); buildTerrain(); consumeInboxStart(); consumeInboxFunds();}
+function toMenu() { clearBattleSnapshot(); S = null; settleCtx = null; $('over').style.display = 'none'; $('revivebar').style.display = 'none'; $('intel').style.display = 'none'; renderMenu(); $('menu').style.display = 'block'; PLAT.settlePendingAds(); }
 let settleCtx = null; // 本局结算上下文（供广告「双倍星」发奖定位：{levelIdx, stars, doubled}）
 function appendGrowthLine(xp, parts) { // M13：结算面板追加一行成长入账（textContent 口径，不拼 HTML）
 const p = $('overStats'); if (!p || (!xp && !parts)) return;
@@ -2681,6 +2710,7 @@ p.appendChild(document.createElement('br'));
 p.appendChild(document.createTextNode('🎖 成长入账：经验 +' + xp + (parts ? ' · 零件 +' + parts : '') + '（指挥部 Lv' + levelOf(SAVE.growth.xp) + ' · 零件余额 ' + SAVE.growth.parts + '）'));
 }
 function settle() { // 结算：写存档（只经 save 层）；平台上报/统计/云同步只经 platform 分段
+clearBattleSnapshot(); // 本局已结算：快照作废，不许再被恢复
 const mmss = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 const R = battleReport(S); // 四行战报：用时/击毁/损失/剩余资金
 const reportHtml = '战报 · 用时 ' + mmss(R.time) + ' ｜ 击毁 ' + R.kills + ' ｜ 损失 ' + R.losses + ' ｜ 剩余资金 ' + R.funds;
@@ -2793,6 +2823,33 @@ const store = pickStorage();
 let toastTimer = null;
 function toast(msg) { const t = $('toast'); if (!t) return; t.textContent = msg; t.style.display = 'block'; if (toastTimer) clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3400); }
 function loadInbox() { try { const j = JSON.parse((store && store.getItem(AD_INBOX_KEY)) || 'null'); return { start: (j && j.start) || 0, revive: (j && j.revive) || 0, funds: (j && j.funds) || 0 }; } catch (e) { return { start: 0, revive: 0, funds: 0 }; } }
+// ---- 战斗快照落盘/恢复（容器重载后把正在打的那一局接回来；快照属当前槽、20 分钟内有效） ----
+function saveBattleSnapshot() {
+  if (!S || S.over || !store) return;
+  if (S.mode !== 'level' && S.mode !== 'daily' && S.mode !== 'endless') return; // 对决/布防不本地恢复
+  try { store.setItem(BATTLE_SNAP_KEY, JSON.stringify({ v: 1, at: Date.now(), slot: ACTIVE_SLOT, data: serializeBattle(S) })); } catch (e) {}
+}
+function clearBattleSnapshot() { if (store) { try { store.removeItem(BATTLE_SNAP_KEY); } catch (e) {} } }
+function readBattleSnapshot() {
+  if (!store) return null;
+  try {
+    const j = JSON.parse(store.getItem(BATTLE_SNAP_KEY) || 'null');
+    if (!j || j.v !== 1 || !j.data || j.data.over) return null;
+    if (j.slot !== ACTIVE_SLOT) return null; // 快照只属拍下时那个档
+    if (Date.now() - (j.at || 0) > 20 * 60 * 1000) return null; // 超 20 分钟视为弃局
+    return j;
+  } catch (e) { return null; }
+}
+function restoreBattle() {
+  const j = readBattleSnapshot(); if (!j) return false;
+  let st = null;
+  try { st = rehydrateBattle(j.data); } catch (e) { st = null; }
+  if (!st) { clearBattleSnapshot(); return false; }
+  S = st;
+  resetTransient(); buildTerrain();
+  toast('已恢复上一局战场：看广告时页面被重载，战局和进度都还在');
+  return true;
+}
 function saveInbox(ib) { if (store) { try { store.setItem(AD_INBOX_KEY, JSON.stringify({ start: ib.start || 0, revive: ib.revive || 0, funds: ib.funds || 0 })); } catch (e) {} } }
 function vataskReady() { return !!(window.ColorboxAI && window.ColorboxAI.vatask && typeof window.ColorboxAI.vatask.completeRewardVideo === 'function' && typeof window.ColorboxAI.vatask.getActivityTaskState === 'function'); }
 function cloudReady() { return !!(window.QX_API_BASE && window.QX_ENV_ID && window.ColorboxAI && window.ColorboxAI.cloud && typeof window.ColorboxAI.cloud.request === 'function'); }
@@ -2823,6 +2880,7 @@ const PLAT = {
   },
   // 拉一支广告：kind ∈ start|double|revive。PENDING 先落盘后拉起；明确回执才删本条，抛错/无回执保留待核。
   async watchAd(kind, snap) {
+    saveBattleSnapshot(); // 拉起广告前先把本局落盘：容器回退会重载页面，回来靠快照恢复战场（奖励补发只管钱、管不了局）
     if (PLAT.busy || !vataskReady()) return false;
     const pre = readAdQueue(store);
     if (pre.items.length) {
@@ -3254,7 +3312,7 @@ function refreshDuelPanel() {
   });
 }
 function openDuel() { $('duel').style.display = 'block'; refreshDuelPanel(); }
-function startDuelWith(snap, meta) { S = initDuelState(snap, meta); resetTransient(); buildTerrain(); }
+function startDuelWith(snap, meta) { clearBattleSnapshot(); S = initDuelState(snap, meta); resetTransient(); buildTerrain(); }
 function duelMatch() {
   $('duel').style.display = 'none'; $('over').style.display = 'none';
   PLAT.duelOpponent((d, err) => {
@@ -3269,6 +3327,7 @@ function duelMatch() {
   });
 }
 function startDefense() {
+  clearBattleSnapshot();
   $('duel').style.display = 'none';
   S = initDefenseState(); resetTransient(); introDone = true; S.camY = 0; buildTerrain();
   $('duelBar').style.display = 'flex'; refreshDuelBar();
@@ -3364,7 +3423,8 @@ function splashSet(pct, txt) { const f = $('splashFill'), t = $('splashText'); i
   const hero = document.querySelector('#menuHero img'), simg = $('splashImg');
   if (simg && hero && hero.getAttribute('src')) simg.src = hero.getAttribute('src'); // 复用选关屏封面图，不重复内嵌一份（包体纪律）
   splashSet(30, '正在装载战场…');
-  $('splashEnter').addEventListener('click', () => { splashEntered = true; $('splash').style.display = 'none'; });
+  $('splashEnter').addEventListener('click', () => { splashEntered = true; $('splash').style.display = 'none'; restoreBattle(); }); // 有未完局快照先恢复战场（看广告被容器重载的那局），没有才落选关屏
+  window.addEventListener('pagehide', () => saveBattleSnapshot()); // 页面被关/被重载前也落一份快照（广告路径之外多一层）
 })();
 const splashWait = Promise.race([
   Promise.allSettled([PLAT.cloudRestore(), PLAT.settlePendingAds()]),
@@ -3406,7 +3466,7 @@ window.QX_DEBUG = { get state() { return S;}, CFG, spawn: (side, type, x, y) => 
 startLevel, startEndless, startDaily, dailyForDate, dailyDateStr, callStrike: (x, y) => S? callStrike(S, x, y): false, strikeDamage: (x, y, side) => S? strikeDamage(S, x, y, side || 'P'): 0,
 canPlace, placeBuilding, placeFailReason, queueUnit, setOrder, getSave: () => SAVE,
 getGrowth: () => SAVE.growth, levelOf, unlockOf, buyTech: t => { const ok = buyTech(SAVE, t); if (ok) saveSave(SAVE); return ok; }, openTech, renderTech, renderMenu,
-encodeSaveCode, decodeSaveCode, openSavePage, renderSavePage, switchSlot, resetSlot, getActiveSlot: () => ACTIVE_SLOT, slotSummaryOf, splashEntered: () => splashEntered, enterSplash: () => { const b = $('splashEnter'); if (b && !b.disabled) b.click(); },
+encodeSaveCode, decodeSaveCode, openSavePage, renderSavePage, switchSlot, resetSlot, getActiveSlot: () => ACTIVE_SLOT, slotSummaryOf, saveBattleSnapshot, restoreBattle, clearBattleSnapshot, hasBattleSnapshot: () => !!readBattleSnapshot(), splashEntered: () => splashEntered, enterSplash: () => { const b = $('splashEnter'); if (b && !b.disabled) b.click(); },
 PLAT, adQueue: () => readAdQueue(store), settleAds: () => PLAT.settlePendingAds(), watchAd: (k, s) => PLAT.watchAd(k, s), openBoard, applyRevive: () => S? applyRevive(S): false, bgmOn: () => BGM.on, isMuted: () => isMuted(),
 duelMatch, startDefense, publishDefense, startDuelWith, initDuelState, initDefenseState, snapshotFromDefense, cleanSnapshot, DUEL_AI_BASES, computeFog, foeBuildingVis, foeUnitVisible, openDuel};
 }
@@ -3424,7 +3484,8 @@ dailyDateStr, dailySeedFrom, dailyForDate, applyDailyMods, initDailyState, award
 AD_MAIN_KEY, AD_BG_KEY, AD_INBOX_KEY, readAdQueue, writeAdQueue, makeAdEntry, settleAdQueue, adGateBlocked, boardIsAsc, boardScoreText,
 cleanSnapshot, DUEL_AI_BASES, duelAiBaseFor, initDuelState, initDefenseState, snapshotFromDefense, computeFog, foeUnitVisible, foeBuildingVis, dimsOf, roadSetOf, oreOf,
 defaultGrowth, levelOf, unlockOf, unlockLevelOf, awardXp, awardParts, buyTech, statOf, setSaveProvider, updateTesla, updateRepair,
-SAVE_CODE_PREFIX, encodeSaveCode, decodeSaveCode};
+SAVE_CODE_PREFIX, encodeSaveCode, decodeSaveCode,
+BATTLE_SNAP_KEY, serializeBattle, rehydrateBattle};
 }
 
 </script>
