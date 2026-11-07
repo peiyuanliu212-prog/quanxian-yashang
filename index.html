@@ -135,6 +135,12 @@
   #savePage .srow { display:flex; gap:8px; margin-top:10px; }
   #savePage .srow button { flex:1; padding:11px 6px; font-size:13.5px; font-weight:bold; background:linear-gradient(#14456e,#0d2c47); color:#dceeff; border:1px solid #4da3ff; border-radius:6px; cursor:pointer; }
   #savePage .srow button:disabled { opacity:.5; cursor:default; }
+  #savePage .slotcard { background:#12161c; border:1px solid #39424c; border-radius:8px; padding:10px 12px; margin-top:8px; }
+  #savePage .slotcard.cur { border-color:#ffd94d; background:#1a1c11; }
+  #savePage .slott { font-size:15px; font-weight:bold; color:#e8ebee; }
+  #savePage .slotcard.cur .slott { color:#ffd94d; }
+  #savePage .sloti { font-size:12px; color:#9fb4c8; margin-top:3px; line-height:1.55; }
+  #savePage .srow button.danger { background:linear-gradient(#5a2b24,#3d1d18); border-color:#a3503f; color:#ffd9d2; }
   #savePage .slbl { font-size:11px; color:#8b95a0; margin:16px 0 5px; letter-spacing:1px; line-height:1.6; }
   #savePage textarea { width:100%; background:#101216; color:#ffeeba; border:1px solid #59636d; border-radius:6px; padding:8px; font-size:11.5px; line-height:1.5; resize:vertical; word-break:break-all; }
   #savePage .sact { display:block; width:100%; margin-top:8px; padding:11px; font-size:14px; font-weight:bold; background:linear-gradient(#3a4046,#2c3136); color:#e8ebee; border:1px solid #59636d; border-radius:6px; cursor:pointer; }
@@ -242,7 +248,7 @@
     <div class="sp-hero"><img id="splashImg" alt=""></div>
     <div class="sp-body">
       <div class="sp-sub">竖屏即时战略 · 造兵编队、占站增益<br>推平赤铁洪流指挥中心</div>
-      <div class="sp-news">本版更新：成长系统上线——指挥部升级解锁狙击兵/维修站/电弧塔，零件升科技；新增存档页与加载页。</div>
+      <div class="sp-news">本版更新：成长系统上线——指挥部升级解锁狙击兵/维修站/电弧塔，零件升科技；新增存档页（三个存档槽）与加载页。</div>
       <div id="splashBar"><div id="splashFill"></div></div>
       <div id="splashText">正在装载战场…</div>
       <button id="splashEnter" disabled>装载中…</button>
@@ -354,6 +360,9 @@
   </div>
   <div id="savePage">
     <h2>💾 存档</h2>
+    <div class="slbl" style="margin-top:2px">存档槽 · 三个档互相独立（跟卡王同口径），切档时当前档自动保存；下方摘要与存档码都是当前档的</div>
+    <div id="saveSlots"></div>
+    <div class="slbl">当前档进度</div>
     <div id="saveSummary"></div>
     <div id="saveCloud"></div>
     <div class="srow"><button id="saveSyncBtn">☁️ 立即同步到云端</button><button id="saveRestoreBtn">⬇️ 从云端恢复</button></div>
@@ -690,8 +699,53 @@ function normalizeSave(raw) { // 容错：任何脏数据都收敛到合法形�
   return d;
 }
 function pickStorage(storage) { if (storage) return storage; try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } }
-function loadSave(storage) { const s = pickStorage(storage); if (!s) return defaultSave(); try { return normalizeSave(JSON.parse(s.getItem(SAVE_KEY) || 'null')); } catch (e) { return defaultSave(); } }
-function saveSave(data, storage) { const s = pickStorage(storage); if (s) { try { s.setItem(SAVE_KEY, JSON.stringify(normalizeSave(data))); } catch (e) {} } return true; }
+// ---- 三存档槽（M13 追补，主人指定与双游卡王同口径：三个档互相独立） ----
+// 槽 1 沿用历史键 quanxian_save_v1（现行玩家进度自动就是 1 号档，零迁移）；槽 2/3 为新键。当前槽标记存 quanxian_active_slot。
+// loadSave/saveSave 永远只作用于「当前槽键」SAVE_ACTIVE_KEY，切换槽位即换键——全仓既有 saveSave(SAVE) 调用点零改动。
+const SAVE_SLOTS = 3;
+const ACTIVE_SLOT_KEY = 'quanxian_active_slot';
+function slotKey(i) { const n = Math.max(1, Math.min(SAVE_SLOTS, Math.floor(Number(i)) || 1)); return n === 1 ? SAVE_KEY : 'quanxian_save_s' + n; }
+let SAVE_ACTIVE_KEY = SAVE_KEY;
+function setActiveSlotKey(i) { SAVE_ACTIVE_KEY = slotKey(i); return SAVE_ACTIVE_KEY; }
+function readSlotRaw(storage, i) { const s = pickStorage(storage); if (!s) return null; try { const v = s.getItem(slotKey(i)); if (!v) return null; const o = JSON.parse(v); return o && typeof o === 'object' ? o : null; } catch (e) { return null; } }
+function slotExists(storage, i) { return readSlotRaw(storage, i) !== null; }
+function loadSaveAt(storage, i) { const raw = readSlotRaw(storage, i); return raw ? normalizeSave(raw) : defaultSave(); }
+function saveSaveAt(data, storage, i) { const s = pickStorage(storage); if (s) { try { s.setItem(slotKey(i), JSON.stringify(normalizeSave(data))); } catch (e) {} } return true; }
+function slotSummaryOf(raw) { // 槽位卡摘要（raw 为原始对象或已 normalize 的存档；空槽传 null 得 null）
+  if (!raw || typeof raw !== 'object') return null;
+  const n = normalizeSave(raw);
+  return { unlocked: n.unlocked, stars: n.stars.reduce((a, b) => a + b, 0), totalStars: n.totalStars, endlessBest: n.endlessBest, level: levelOf(n.growth.xp), xp: n.growth.xp, parts: n.growth.parts };
+}
+function loadSave(storage) { const s = pickStorage(storage); if (!s) return defaultSave(); try { return normalizeSave(JSON.parse(s.getItem(SAVE_ACTIVE_KEY) || 'null')); } catch (e) { return defaultSave(); } }
+function saveSave(data, storage) { const s = pickStorage(storage); if (s) { try { s.setItem(SAVE_ACTIVE_KEY, JSON.stringify(normalizeSave(data))); } catch (e) {} } return true; }
+// ---- 云存档三槽打包（云端键仍为 SAVE_KEY 向后兼容） ----
+// 上传格式 {kind:'qx-slots-v1', active, slots:{1:存档,2:存档,3:存档}}（只含已开档槽位）。
+// 恢复计划 planCloudMerge：新格式逐槽 mergeSaveHigh 取高；旧格式（v2 及更早的单档裸存档）整体并入槽 1，老玩家云端进度不丢。
+const CLOUD_SLOTS_KIND = 'qx-slots-v1';
+function packCloudSlots(storage, active) {
+  const slots = {};
+  for (let i = 1; i <= SAVE_SLOTS; i++) { const raw = readSlotRaw(storage, i); if (raw) slots[i] = normalizeSave(raw); }
+  const a = Math.floor(Number(active)) || 1;
+  return JSON.stringify({ kind: CLOUD_SLOTS_KIND, active: Math.max(1, Math.min(SAVE_SLOTS, a)), slots });
+}
+function planCloudMerge(storage, cloudRaw) {
+  let cloud = cloudRaw;
+  if (typeof cloudRaw === 'string') { try { cloud = JSON.parse(cloudRaw); } catch (e) { return null; } }
+  if (!cloud || typeof cloud !== 'object' || Array.isArray(cloud)) return null;
+  const writes = {};
+  const consider = (i, cloudSave) => {
+    if (!cloudSave || typeof cloudSave !== 'object') return;
+    const local = slotExists(storage, i) ? loadSaveAt(storage, i) : defaultSave();
+    const merged = mergeSaveHigh(local, cloudSave);
+    if (merged && JSON.stringify(merged) !== JSON.stringify(normalizeSave(local))) writes[i] = merged;
+  };
+  if (cloud.kind === CLOUD_SLOTS_KIND && cloud.slots && typeof cloud.slots === 'object') {
+    for (let i = 1; i <= SAVE_SLOTS; i++) consider(i, cloud.slots[i] || cloud.slots[String(i)]);
+    return { writes, legacy: false };
+  }
+  consider(1, cloud); // 旧格式单档 → 槽 1
+  return { writes, legacy: true };
+}
 
 // ============ module: battle（状态/初始化/关卡载入） ============
 let S = null, uidSeq = 1;
@@ -1714,6 +1768,9 @@ if (typeof document !== 'undefined') {
   const CELL = CFG.cell;
   const worldH = () => (S && S.rows ? S.rows : CFG.rows) * CELL; // M11：世界高随当前 state 尺寸（攻防 36 行），战役口径不变
   const maxCam = () => worldH() - CFG.viewH;
+  let ACTIVE_SLOT = 1; // M13 三存档槽：读当前槽标记（缺失/非法默认 1 号槽，老玩家进度原地成 1 号档）
+  try { const a = parseInt(localStorage.getItem(ACTIVE_SLOT_KEY) || '1', 10); if (a >= 1 && a <= SAVE_SLOTS) ACTIVE_SLOT = a; } catch (e) {}
+  setActiveSlotKey(ACTIVE_SLOT);
   let SAVE = loadSave();
   setSaveProvider(() => SAVE); // M13：成长账本存档注入（statOf 科技生效层/解锁门引擎兜底读此引用；SAVE 整体重赋值时箭头函数自动跟随）
   let placementType = null, rallyMode = false, swTargeting = false, hover = null, lastTap = { t: 0, x: 0, y: 0 }, drag = null, introDone = false, overShown = false, hudT = 0, fpsEMA = 60, fpsT = 0;
@@ -2550,13 +2607,54 @@ function saveCloudText() {
   if (PLAT.cloudState === 'failed') return '云存档：已接入，但最近一次同步/读取没成功；本地存档照常，可以点「立即同步」重试。';
   return '云存档：已接入，同账号换设备打开会自动恢复并取高合并。';
 }
+let slotResetArmed = 0; // 清空槽位两段确认的武装槽号（0=未武装）
+function renderSaveSlots() {
+  const box = $('saveSlots'); if (!box) return;
+  box.innerHTML = '';
+  for (let i = 1; i <= SAVE_SLOTS; i++) {
+    const isCur = i === ACTIVE_SLOT;
+    const sum = isCur ? slotSummaryOf(SAVE) : slotSummaryOf(readSlotRaw(null, i));
+    const card = document.createElement('div'); card.className = 'slotcard' + (isCur ? ' cur' : '');
+    const title = document.createElement('div'); title.className = 'slott'; title.textContent = '存档 ' + i + (isCur ? ' · 使用中' : '');
+    const info = document.createElement('div'); info.className = 'sloti';
+    info.textContent = !sum ? '空存档 · 切过去就从第 1 关新开一档' : ('已解锁 ' + sum.unlocked + '/8 关 · 战役星 ' + sum.stars + '/24 · 指挥部 Lv' + sum.level + ' · 无尽最佳 ' + sum.endlessBest);
+    card.appendChild(title); card.appendChild(info);
+    const row = document.createElement('div'); row.className = 'srow';
+    if (!isCur) { const sw = document.createElement('button'); sw.textContent = '切到此档'; sw.addEventListener('click', () => switchSlot(i)); row.appendChild(sw); }
+    if (sum) { const rs = document.createElement('button'); rs.className = 'danger'; rs.textContent = slotResetArmed === i ? '再点一次确认清空' : '清空此档'; rs.addEventListener('click', () => resetSlot(i)); row.appendChild(rs); }
+    if (row.children.length) card.appendChild(row);
+    box.appendChild(card);
+  }
+}
+function switchSlot(i) {
+  if (i === ACTIVE_SLOT || i < 1 || i > SAVE_SLOTS) return;
+  saveSave(SAVE); // 当前档先落盘再走
+  ACTIVE_SLOT = i; setActiveSlotKey(i);
+  try { localStorage.setItem(ACTIVE_SLOT_KEY, String(i)); } catch (e) {}
+  SAVE = loadSave();
+  if (!slotExists(null, i)) saveSave(SAVE); // 首次进入空槽：落一份新档，槽位自此显示已开档
+  slotResetArmed = 0;
+  refreshMuteBtn(); if (SAVE.muted) bgmStop();
+  renderMenu(); renderSavePage();
+  saveMsg('已切换到存档 ' + i + '：战役、成长、无尽进度都按这个档算。对决分是全账号共用一份（服务端权威），不受换档影响。');
+  PLAT.cloudSync(); // 云端包按三槽整体同步
+}
+function resetSlot(i) {
+  if (slotResetArmed !== i) { slotResetArmed = i; renderSaveSlots(); saveMsg('要清空存档 ' + i + ' 就再点一次「再点一次确认清空」：该档战役/成长/无尽进度全部清零，不可恢复。'); return; }
+  slotResetArmed = 0;
+  try { localStorage.removeItem(slotKey(i)); } catch (e) {}
+  if (i === ACTIVE_SLOT) { SAVE = defaultSave(); saveSave(SAVE); refreshMuteBtn(); renderMenu(); }
+  renderSavePage(); PLAT.cloudSync();
+  saveMsg('存档 ' + i + ' 已清空' + (i === ACTIVE_SLOT ? '，当前档已回到全新开局。' : '。'));
+}
 function renderSavePage() {
+  renderSaveSlots();
   setLines($('saveSummary'), saveSummaryLines());
   $('saveCloud').textContent = saveCloudText();
   $('saveExport').value = encodeSaveCode(SAVE);
-  if ($('saveInfo')) $('saveInfo').textContent = '已解锁 ' + SAVE.unlocked + '/8 关 · ★' + SAVE.totalStars + ' · ' + (cloudSaveReady() ? '云存档已接入' : '本地存档（存档码可搬家）');
+  if ($('saveInfo')) $('saveInfo').textContent = '存档 ' + ACTIVE_SLOT + ' · 已解锁 ' + SAVE.unlocked + '/8 关 · ★' + SAVE.totalStars + ' · ' + (cloudSaveReady() ? '云存档已接入' : '本地存档（存档码可搬家）');
 }
-function openSavePage() { saveImportArmed = null; const b = $('saveImportBtn'); if (b) b.textContent = '导入存档码（只取更高进度）'; renderSavePage(); $('savePage').style.display = 'block'; }
+function openSavePage() { saveImportArmed = null; slotResetArmed = 0; const b = $('saveImportBtn'); if (b) b.textContent = '导入存档码（只取更高进度）'; renderSavePage(); $('savePage').style.display = 'block'; }
 function saveMsg(txt) { $('saveMsg').textContent = txt; }
 // M5：结算后面板下控制区锁定/恢复（按钮全 disabled＋整体变灰；refreshHUD 周期写入叠加 controlsLocked 不会冲掉）
 function setControlsEnabled(on) {
@@ -2680,7 +2778,7 @@ $('saveImportBtn').addEventListener('click', () => {
   else saveMsg('导入完成：对方进度没有比你现在更高的项，进度保持不变。');
   renderSavePage();
 });
-$('saveSyncBtn').addEventListener('click', async () => { const b = $('saveSyncBtn'); b.disabled = true; const r = await PLAT.cloudSyncNow(); b.disabled = false; saveMsg(r.ok ? '已同步到云端：现在换设备用同账号打开就能恢复这份进度。' : (r.reason === 'local' ? '当前环境没有云存档可用，进度只存本机；换设备请用存档码。' : r.reason === 'dropped' ? '平台暂时不收这份存档（本会话写入被停），本地进度没丢，重开游戏后再试。' : '同步没成功，本地进度没丢，稍后再点一次。')); renderSavePage(); });
+$('saveSyncBtn').addEventListener('click', async () => { const b = $('saveSyncBtn'); b.disabled = true; const r = await PLAT.cloudSyncNow(); b.disabled = false; saveMsg(r.ok ? '已同步到云端：三个存档槽一起存好了，换设备用同账号打开就能恢复。' : (r.reason === 'local' ? '当前环境没有云存档可用，进度只存本机；换设备请用存档码。' : r.reason === 'dropped' ? '平台暂时不收这份存档（本会话写入被停），本地进度没丢，重开游戏后再试。' : '同步没成功，本地进度没丢，稍后再点一次。')); renderSavePage(); });
 $('saveRestoreBtn').addEventListener('click', async () => { const b = $('saveRestoreBtn'); b.disabled = true; const r = await PLAT.cloudRestoreNow(); b.disabled = false; saveMsg(r.ok ? (r.empty ? '云端还没有存过档，没有可恢复的进度。' : (r.merged ? '已从云端恢复并合并：更高进度已经生效。' : '云端进度和本地一致，没有需要合并的。')) : (r.reason === 'local' ? '当前环境没有云存档可用。' : '读取云端没成功，本地进度没动，稍后再试。')); renderSavePage(); });
 $('dailyBtn').addEventListener('click', startDaily);
 $('btnMute').addEventListener('click', () => { SAVE.muted = !SAVE.muted; saveSave(SAVE); if (SAVE.muted) bgmStop(); else bgmStart(); refreshMuteBtn(); });
@@ -2859,7 +2957,8 @@ const PLAT = {
     }
     PLAT.lastSync = now;
     try {
-      const p = window.ColorboxAI.cloudSave.setValue({ key: SAVE_KEY, value: JSON.stringify(normalizeSave(SAVE)) });
+      saveSave(SAVE); // 当前槽先落盘，打包读的才是最新三槽
+      const p = window.ColorboxAI.cloudSave.setValue({ key: SAVE_KEY, value: packCloudSlots(null, ACTIVE_SLOT) });
       if (p && typeof p.then === 'function') p.then(r => { if (r && r.code === 204 && r.data && r.data.result && r.data.dropped === true) { PLAT.cloudDropped = true; PLAT.cloudState = 'dropped'; } else { PLAT.lastSyncOk = Date.now(); PLAT.cloudState = 'synced'; } }).catch(() => {});
     } catch (e) {}
   },
@@ -2870,9 +2969,9 @@ const PLAT = {
       const r = await window.ColorboxAI.cloudSave.getValue({ key: SAVE_KEY });
       if (!r || r.code !== 200) { PLAT.cloudState = 'failed'; return; }
       if (r.data === null || r.data === undefined) { PLAT.cloudState = 'synced'; PLAT.cloudSync(true); return; }
-      const merged = mergeSaveHigh(SAVE, r.data);
+      const plan = planCloudMerge(null, r.data); // 三槽逐槽取高；旧格式单档并入槽 1
       PLAT.cloudState = 'synced';
-      if (merged && JSON.stringify(merged) !== JSON.stringify(normalizeSave(SAVE))) { SAVE = merged; saveSave(SAVE); renderMenu(); }
+      if (plan) { let curChanged = false; for (const k of Object.keys(plan.writes)) { const i = Number(k); saveSaveAt(plan.writes[k], null, i); if (i === ACTIVE_SLOT) { SAVE = plan.writes[k]; curChanged = true; } } if (curChanged) renderMenu(); }
     } catch (e) { PLAT.cloudState = 'failed'; }
   },
   // M13 存档页手动同步（存档页按钮专用：给玩家可见回执，不像自动同步那样静默）
@@ -2880,7 +2979,8 @@ const PLAT = {
     if (!cloudSaveReady()) return { ok: false, reason: 'local' };
     if (PLAT.cloudDropped) { PLAT.cloudState = 'dropped'; return { ok: false, reason: 'dropped' }; }
     try {
-      const r = await window.ColorboxAI.cloudSave.setValue({ key: SAVE_KEY, value: JSON.stringify(normalizeSave(SAVE)) });
+      saveSave(SAVE);
+      const r = await window.ColorboxAI.cloudSave.setValue({ key: SAVE_KEY, value: packCloudSlots(null, ACTIVE_SLOT) });
       if (r && r.code === 204 && r.data && r.data.result && r.data.dropped === true) { PLAT.cloudDropped = true; PLAT.cloudState = 'dropped'; return { ok: false, reason: 'dropped' }; }
       PLAT.lastSync = Date.now(); PLAT.lastSyncOk = Date.now(); PLAT.cloudState = 'synced';
       return { ok: true };
@@ -2893,10 +2993,11 @@ const PLAT = {
       const r = await window.ColorboxAI.cloudSave.getValue({ key: SAVE_KEY });
       if (!r || r.code !== 200) { PLAT.cloudState = 'failed'; return { ok: false, reason: 'error' }; }
       if (r.data === null || r.data === undefined) return { ok: true, merged: false, empty: true };
-      const merged = mergeSaveHigh(SAVE, r.data);
-      if (!merged) { PLAT.cloudState = 'failed'; return { ok: false, reason: 'error' }; }
+      const plan = planCloudMerge(null, r.data);
+      if (!plan) { PLAT.cloudState = 'failed'; return { ok: false, reason: 'error' }; }
       PLAT.cloudState = 'synced';
-      if (JSON.stringify(merged) !== JSON.stringify(normalizeSave(SAVE))) { SAVE = merged; saveSave(SAVE); renderMenu(); return { ok: true, merged: true }; }
+      const keys = Object.keys(plan.writes);
+      if (keys.length) { let curChanged = false; for (const k of keys) { const i = Number(k); saveSaveAt(plan.writes[k], null, i); if (i === ACTIVE_SLOT) { SAVE = plan.writes[k]; curChanged = true; } } if (curChanged) renderMenu(); renderSavePage(); return { ok: true, merged: true }; }
       return { ok: true, merged: false };
     } catch (e) { PLAT.cloudState = 'failed'; return { ok: false, reason: 'error' }; }
   },
@@ -3305,7 +3406,7 @@ window.QX_DEBUG = { get state() { return S;}, CFG, spawn: (side, type, x, y) => 
 startLevel, startEndless, startDaily, dailyForDate, dailyDateStr, callStrike: (x, y) => S? callStrike(S, x, y): false, strikeDamage: (x, y, side) => S? strikeDamage(S, x, y, side || 'P'): 0,
 canPlace, placeBuilding, placeFailReason, queueUnit, setOrder, getSave: () => SAVE,
 getGrowth: () => SAVE.growth, levelOf, unlockOf, buyTech: t => { const ok = buyTech(SAVE, t); if (ok) saveSave(SAVE); return ok; }, openTech, renderTech, renderMenu,
-encodeSaveCode, decodeSaveCode, openSavePage, renderSavePage, splashEntered: () => splashEntered, enterSplash: () => { const b = $('splashEnter'); if (b && !b.disabled) b.click(); },
+encodeSaveCode, decodeSaveCode, openSavePage, renderSavePage, switchSlot, resetSlot, getActiveSlot: () => ACTIVE_SLOT, slotSummaryOf, splashEntered: () => splashEntered, enterSplash: () => { const b = $('splashEnter'); if (b && !b.disabled) b.click(); },
 PLAT, adQueue: () => readAdQueue(store), settleAds: () => PLAT.settlePendingAds(), watchAd: (k, s) => PLAT.watchAd(k, s), openBoard, applyRevive: () => S? applyRevive(S): false, bgmOn: () => BGM.on, isMuted: () => isMuted(),
 duelMatch, startDefense, publishDefense, startDuelWith, initDuelState, initDefenseState, snapshotFromDefense, cleanSnapshot, DUEL_AI_BASES, computeFog, foeBuildingVis, foeUnitVisible, openDuel};
 }
@@ -3315,6 +3416,7 @@ if (typeof module!== 'undefined' && module.exports) {
 module.exports = { CFG, damageMultiplier, dpsAgainst, refineryPayback, createEconomy, simulateBattle,
 calcStars, endlessBudgetFor, endlessWaveComp, endlessScore,
 defaultSave, normalizeSave, loadSave, saveSave, SAVE_KEY,
+SAVE_SLOTS, ACTIVE_SLOT_KEY, slotKey, setActiveSlotKey, readSlotRaw, slotExists, loadSaveAt, saveSaveAt, slotSummaryOf, CLOUD_SLOTS_KIND, packCloudSlots, planCloudMerge,
 initState, initEndlessState, applyLevel, updateGame, checkWinner, powerInfo, refineryCount, canPlace, placeBuilding, placeFailReason, buildingCost, queueUnit, popOf, boostActive, fireFx, mkUnit, mkBuilding, setOrder,
 clampSubmitScore, mergeSaveHigh, battleReport, applyRevive,
 swTick, swAdBoost, callStrike, strikeDamage, updateSuperweapon, playerClusterCenter, rushProduction, rushTargetCount,
